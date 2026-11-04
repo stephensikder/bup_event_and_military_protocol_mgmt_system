@@ -1,9 +1,8 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
-
-$pdo = db();
 
 $page_title = 'Invitations | BUP Protocol';
 
@@ -13,7 +12,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 // =====================================================
-// HANDLE POST ACTIONS
+// HANDLE POST ACTIONS (MongoDB Atlas)
 // =====================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -30,79 +29,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $guestName = trim($_POST['guest_name'] ?? '');
         $guestEmail = trim($_POST['guest_email'] ?? '');
 
-
         if (!$eventId || $guestName === '' || $guestEmail === '') {
-
-            flash(
-                'error',
-                'Event, guest name and email are required.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+            flash('error', 'Event, guest name and email are required.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
 
         if (!filter_var($guestEmail, FILTER_VALIDATE_EMAIL)) {
-
-            flash(
-                'error',
-                'Please enter a valid email address.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+            flash('error', 'Please enter a valid email address.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
 
         // Verify event
-        $stmt = $pdo->prepare("
-            SELECT
-                id,
-                name,
-                event_date,
-                event_time,
-                venue,
-                description
-            FROM events
-            WHERE id = ?
-            LIMIT 1
-        ");
+        $eventDoc = mcoll('events')->findOne(['id' => $eventId]);
 
-        $stmt->execute([$eventId]);
-        $event = $stmt->fetch();
-
-
-        if (!$event) {
-
-            flash(
-                'error',
-                'Selected event was not found.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+        if (!$eventDoc) {
+            flash('error', 'Selected event was not found.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
+        $event = mongo_doc_to_array($eventDoc);
 
         try {
-            $pdo->beginTransaction();
+            $now = date('Y-m-d H:i:s');
 
             // 1. Check if guest exists, or create guest for this event
-            $stmt = $pdo->prepare("SELECT id FROM guests WHERE event_id = ? AND (email = ? OR name = ?) LIMIT 1");
-            $stmt->execute([$eventId, $guestEmail, $guestName]);
-            $guestId = $stmt->fetchColumn();
+            $guestDoc = mcoll('guests')->findOne([
+                'event_id' => $eventId,
+                '$or' => [
+                    ['email' => $guestEmail],
+                    ['name' => $guestName]
+                ]
+            ]);
 
-            if (!$guestId) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO guests (event_id, name, email, category, priority_level, arrival_status)
-                    VALUES (?, ?, ?, 'Invited Guest', 'Normal', 'Expected')
-                ");
-                $stmt->execute([$eventId, $guestName, $guestEmail]);
-                $guestId = (int)$pdo->lastInsertId();
+            if (!$guestDoc) {
+                $guestId = mongo_next_id('guests');
+                mcoll('guests')->insertOne([
+                    'id' => $guestId,
+                    'event_id' => $eventId,
+                    'name' => $guestName,
+                    'email' => $guestEmail,
+                    'category' => 'Invited Guest',
+                    'priority_level' => 'Normal',
+                    'arrival_status' => 'Expected',
+                    'created_at' => $now,
+                    'updated_at' => $now
+                ]);
+            } else {
+                $guest = mongo_doc_to_array($guestDoc);
+                $guestId = (int)$guest['id'];
             }
 
             // 2. Generate unique 5-char attendance token
@@ -112,64 +85,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 for ($i = 0; $i < 5; $i++) {
                     $token .= $characters[random_int(0, strlen($characters) - 1)];
                 }
-                $check = $pdo->prepare("SELECT id FROM attendance WHERE qr_token = ? LIMIT 1");
-                $check->execute([$token]);
-            } while ($check->fetch());
+                $check = mcoll('attendance')->findOne(['qr_token' => $token]);
+            } while ($check !== null);
 
             // 3. Register in attendance table if not already present
-            $attCheck = $pdo->prepare("SELECT id, qr_token FROM attendance WHERE event_id = ? AND guest_id = ? LIMIT 1");
-            $attCheck->execute([$eventId, $guestId]);
-            $existingAtt = $attCheck->fetch();
+            $existingAtt = mcoll('attendance')->findOne([
+                'event_id' => $eventId,
+                'guest_id' => $guestId
+            ]);
 
             if ($existingAtt && !empty($existingAtt['qr_token'])) {
                 $token = $existingAtt['qr_token'];
             } else {
-                $stmt = $pdo->prepare("
-                    INSERT INTO attendance (event_id, guest_id, qr_token, status)
-                    VALUES (?, ?, ?, 'Registered')
-                ");
-                $stmt->execute([$eventId, $guestId, $token]);
+                $attId = mongo_next_id('attendance');
+                mcoll('attendance')->insertOne([
+                    'id' => $attId,
+                    'event_id' => $eventId,
+                    'guest_id' => $guestId,
+                    'qr_token' => $token,
+                    'status' => 'Registered',
+                    'check_in_time' => null,
+                    'check_out_time' => null,
+                    'notes' => null,
+                    'created_at' => $now
+                ]);
             }
 
             // 4. Create invitation record
-            $stmt = $pdo->prepare("
-                INSERT INTO invitations
-                    (event_id, guest_name, guest_email, qr_token, status, invited_at)
-                VALUES (?, ?, ?, ?, 'Sent', NOW())
-            ");
-
-            $stmt->execute([
-                $eventId,
-                $guestName,
-                $guestEmail,
-                $token
+            $invitationId = mongo_next_id('invitations');
+            mcoll('invitations')->insertOne([
+                'id' => $invitationId,
+                'event_id' => $eventId,
+                'guest_name' => $guestName,
+                'guest_email' => $guestEmail,
+                'qr_token' => $token,
+                'status' => 'Sent',
+                'invited_at' => $now,
+                'responded_at' => null
             ]);
 
-            $invitationId = (int) $pdo->lastInsertId();
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs (user_id, action, description)
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
-                current_user()['id'],
+            mongo_audit_log(
                 'Invitation Created',
                 'Invitation #' . $invitationId .
                 ' created for ' . $guestName .
-                ' (token: ' . $token . ') for event "' . $event['name'] . '".'
-            ]);
-
-            $pdo->commit();
+                ' (token: ' . $token . ') for event "' . ($event['name'] ?? '') . '".'
+            );
 
             // 5. Send email through PHPMailer SMTP with QR Code & Token
             $emailSent = false;
             $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' . urlencode($token);
 
             try {
-                $mailConfig = require __DIR__ . '/config/mail.php';
+                $mailConfig = get_mail_config();
 
                 $mail = new PHPMailer(true);
+
                 $mail->isSMTP();
                 $mail->Host       = $mailConfig['host'];
                 $mail->SMTPAuth   = true;
@@ -178,175 +148,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                 $mail->Port       = (int) $mailConfig['port'];
                 $mail->CharSet    = 'UTF-8';
-                $mail->Timeout    = 8;
-                $mail->SMTPOptions = [
-                    'ssl' => [
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true,
-                    ]
-                ];
 
-                $mail->setFrom(
-                    $mailConfig['from_email'],
-                    $mailConfig['from_name']
-                );
-
+                $mail->setFrom($mailConfig['from_email'], $mailConfig['from_name']);
                 $mail->addAddress($guestEmail, $guestName);
-
                 $mail->isHTML(true);
-                $mail->Subject = 'Official Invitation & Attendance Pass: ' . $event['name'];
 
-                $safeGuest = htmlspecialchars(
-                    $guestName,
-                    ENT_QUOTES,
-                    'UTF-8'
-                );
+                $safeEventName = htmlspecialchars($event['name'] ?? '', ENT_QUOTES, 'UTF-8');
+                $eventDate     = !empty($event['event_date']) ? date('l, F j, Y', strtotime($event['event_date'])) : 'Date TBD';
+                $eventTime     = !empty($event['event_time']) ? date('g:i A', strtotime($event['event_time'])) : '';
+                $venue         = htmlspecialchars($event['venue'] ?? 'Venue To Be Announced', ENT_QUOTES, 'UTF-8');
+                $safeGuestName = htmlspecialchars($guestName, ENT_QUOTES, 'UTF-8');
+                $safeToken     = htmlspecialchars($token, ENT_QUOTES, 'UTF-8');
 
-                $safeEvent = htmlspecialchars(
-                    $event['name'] ?? 'Official Event',
-                    ENT_QUOTES,
-                    'UTF-8'
-                );
-
-                $safeVenue = htmlspecialchars(
-                    $event['venue'] ?? 'To be announced',
-                    ENT_QUOTES,
-                    'UTF-8'
-                );
-
-                $safeDescription = htmlspecialchars(
-                    $event['description'] ?? '',
-                    ENT_QUOTES,
-                    'UTF-8'
-                );
-
-                $eventDate = !empty($event['event_date'])
-                    ? date('l, d F Y', strtotime($event['event_date']))
-                    : 'To be announced';
-
-                $eventTime = !empty($event['event_time'])
-                    ? date('h:i A', strtotime($event['event_time']))
-                    : 'To be announced';
-
-                $safeDescription = nl2br($safeDescription);
+                $mail->Subject = 'Official Invitation: ' . ($event['name'] ?? 'Event') . ' - Bangladesh University of Professionals';
 
                 $mail->Body = '
                     <!DOCTYPE html>
                     <html lang="en">
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>Official Event Invitation</title>
-                    </head>
-                    <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#243247;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f1f5f9;padding:30px 10px;">
-                    <tr>
-                    <td align="center">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:650px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
-                        <tr>
-                            <td align="center" style="background:#082d21;padding:32px 24px;border-bottom:5px solid #d4ad5b;">
-                                <div style="display:inline-block;border:1px solid #d4ad5b;color:#f5d98d;font-size:12px;font-weight:bold;letter-spacing:3px;padding:8px 14px;border-radius:4px;margin-bottom:16px;">
-                                    BANGLADESH UNIVERSITY OF PROFESSIONALS
-                                </div>
-                                <h1 style="margin:0;color:#ffffff;font-size:27px;line-height:1.4;">
-                                    Official Event Invitation
-                                </h1>
-                                <p style="margin:10px 0 0;color:#dbe5f1;font-size:13px;line-height:1.6;">
-                                    Event &amp; Military Protocol Management System
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:32px 28px 18px;">
-                                <p style="margin:0 0 18px;font-size:16px;line-height:1.8;">
-                                    Dear <strong>' . $safeGuest . '</strong>,
-                                </p>
-                                <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.8;">
-                                    On behalf of the BUP Event &amp; Protocol Team, we are pleased to invite you to attend the following official event.
-                                </p>
-                                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:5px solid #d4ad5b;border-radius:10px;padding:22px;margin-bottom:24px;">
-                                    <p style="margin:0 0 8px;color:#a47b2c;font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">
-                                        You Are Cordially Invited To
-                                    </p>
-                                    <h2 style="margin:0;color:#082d21;font-size:24px;line-height:1.5;">
-                                        ' . $safeEvent . '
-                                    </h2>
-                                </div>
-                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;">
-                                    <tr>
-                                        <td width="35%" style="padding:14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:13px;font-weight:bold;">DATE</td>
-                                        <td style="padding:14px;border-bottom:1px solid #e2e8f0;color:#082d21;font-size:14px;font-weight:bold;">' . htmlspecialchars($eventDate, ENT_QUOTES, 'UTF-8') . '</td>
-                                    </tr>
-                                    <tr>
-                                        <td width="35%" style="padding:14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:13px;font-weight:bold;">TIME</td>
-                                        <td style="padding:14px;border-bottom:1px solid #e2e8f0;color:#082d21;font-size:14px;font-weight:bold;">' . htmlspecialchars($eventTime, ENT_QUOTES, 'UTF-8') . '</td>
-                                    </tr>
-                                    <tr>
-                                        <td width="35%" style="padding:14px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:bold;">VENUE</td>
-                                        <td style="padding:14px;color:#082d21;font-size:14px;font-weight:bold;">' . $safeVenue . '</td>
-                                    </tr>
-                                </table>
-
-                                <!-- ATTENDANCE PASS & QR CODE -->
-                                <div style="margin:26px 0;padding:24px 20px;background:#f8fafc;border:2px dashed #082d21;border-radius:12px;text-align:center;">
-                                    <p style="margin:0 0 10px;color:#a47b2c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">
-                                        Your Official Attendance Pass
-                                    </p>
-                                    <div style="display:inline-block;background:#ffffff;padding:12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:12px;">
-                                        <img src="' . $qrUrl . '" alt="Attendance QR Code" width="170" height="170" style="display:block;margin:auto;" />
-                                    </div>
-                                    <p style="margin:8px 0 6px;color:#475569;font-size:13px;font-weight:bold;">
-                                        Attendance Check-in Token:
-                                    </p>
-                                    <div style="display:inline-block;background:#082d21;color:#f5d98d;font-size:28px;font-weight:bold;letter-spacing:7px;font-family:monospace;padding:8px 22px;border-radius:8px;border:1px solid #d4ad5b;">
-                                        ' . htmlspecialchars($token, ENT_QUOTES, 'UTF-8') . '
-                                    </div>
-                                    <p style="margin:12px 0 0;color:#64748b;font-size:12px;line-height:1.6;">
-                                        Please present this QR code or 5-character token at the arrival counter to record your attendance.
-                                    </p>
-                                </div>
-
-                                ' . (trim($event['description'] ?? '') !== '' ? '
-                                <div style="margin-top:20px;padding:18px;background:#ffffff;border:1px solid #e2e8f0;border-radius:9px;">
-                                    <h3 style="margin:0 0 8px;color:#082d21;font-size:15px;">About the Event</h3>
-                                    <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;">' . $safeDescription . '</p>
-                                </div>
-                                ' : '') . '
-
-                                <p style="margin:24px 0 16px;color:#475569;font-size:14px;line-height:1.8;">
-                                    We would be honoured by your presence and look forward to welcoming you to this event.
-                                </p>
-                                <p style="margin:0;color:#475569;font-size:14px;line-height:1.8;">
-                                    Yours sincerely,<br>
-                                    <strong style="color:#082d21;">BUP Event &amp; Protocol Team</strong><br>
-                                    <span style="color:#64748b;font-size:12px;">Event &amp; Military Protocol Management System</span>
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td align="center" style="padding:20px;background:#082d21;border-top:3px solid #d4ad5b;">
-                                <p style="margin:0 0 5px;color:#ffffff;font-size:12px;font-weight:bold;">BUP Protocol</p>
-                                <p style="margin:0;color:#cbd5e1;font-size:11px;">This is an official event invitation email. Please retain your QR token for attendance.</p>
-                            </td>
-                        </tr>
-                    </table>
-                    </td>
-                    </tr>
-                    </table>
+                    <head><meta charset="UTF-8"><title>BUP Invitation</title></head>
+                    <body style="margin:0;padding:0;background-color:#0f172a;font-family:Arial,Helvetica,sans-serif;color:#334155;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 16px;">
+                            <tr>
+                                <td align="center">
+                                    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,0.35);">
+                                        <tr>
+                                            <td style="background:linear-gradient(135deg,#064e3b 0%,#0f766e 60%,#047857 100%);padding:40px 36px;text-align:center;">
+                                                <div style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);border-radius:999px;padding:6px 18px;color:#ecfdf5;font-size:12px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:14px;">
+                                                    Official Protocol Invitation
+                                                </div>
+                                                <h1 style="color:#ffffff;font-size:24px;font-weight:800;letter-spacing:0.5px;margin:0 0 6px 0;text-shadow:0 2px 4px rgba(0,0,0,0.25);">
+                                                    Bangladesh University of Professionals
+                                                </h1>
+                                                <p style="color:#a7f3d0;font-size:13px;letter-spacing:1px;margin:0;text-transform:uppercase;">
+                                                    Excellence Through Knowledge &bull; Protocol Division
+                                                </p>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:36px 36px 20px 36px;">
+                                                <p style="font-size:15px;color:#64748b;margin:0 0 8px 0;">Dear</p>
+                                                <h2 style="font-size:22px;color:#0f172a;font-weight:800;margin:0 0 20px 0;">' . $safeGuestName . '</h2>
+                                                <p style="font-size:14px;line-height:1.7;color:#334155;margin:0 0 24px 0;">
+                                                    You are cordially invited as an honoured guest to attend the following institutional event hosted at the Bangladesh University of Professionals.
+                                                </p>
+                                                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #0f766e;border-radius:10px;margin-bottom:28px;">
+                                                    <tr>
+                                                        <td style="padding:20px 22px;">
+                                                            <div style="font-size:11px;font-weight:800;color:#0f766e;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:6px;">Event Title</div>
+                                                            <div style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:14px;">' . $safeEventName . '</div>
+                                                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                                                <tr>
+                                                                    <td width="50%" style="font-size:13px;color:#475569;padding:3px 0;">
+                                                                        <strong style="color:#0f172a;">Date:</strong> ' . $eventDate . '
+                                                                    </td>
+                                                                    <td width="50%" style="font-size:13px;color:#475569;padding:3px 0;">
+                                                                        <strong style="color:#0f172a;">Time:</strong> ' . ($eventTime ?: 'Scheduled on ticket') . '
+                                                                    </td>
+                                                                </tr>
+                                                                <tr>
+                                                                    <td colspan="2" style="font-size:13px;color:#475569;padding:6px 0 0 0;">
+                                                                        <strong style="color:#0f172a;">Venue:</strong> ' . $venue . '
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                                <div style="text-align:center;background:linear-gradient(180deg,#ecfdf5 0%,#f0fdf4 100%);border:2px dashed #059669;border-radius:14px;padding:24px 20px;margin-bottom:26px;">
+                                                    <div style="font-size:11px;font-weight:800;color:#047857;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">
+                                                        Official Entry Pass &bull; Scan at Gate
+                                                    </div>
+                                                    <div style="display:inline-block;padding:10px;background:#ffffff;border-radius:10px;border:1px solid #cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.06);margin-bottom:14px;">
+                                                        <img src="' . $qrUrl . '" alt="QR Pass" width="170" height="170" style="display:block;border:0;">
+                                                    </div>
+                                                    <div style="font-size:12px;color:#64748b;margin-bottom:6px;">Manual Verification Token:</div>
+                                                    <div style="font-size:32px;font-weight:900;letter-spacing:10px;color:#064e3b;font-family:Courier,monospace;">
+                                                        ' . $safeToken . '
+                                                    </div>
+                                                    <div style="font-size:11px;color:#64748b;margin-top:6px;">
+                                                        Please present either the QR code or this 5-character token at reception.
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
                     </body>
                     </html>
                 ';
 
                 $mail->AltBody =
-                    "OFFICIAL EVENT INVITATION\n\n" .
+                    "Official Invitation - Bangladesh University of Professionals\n\n" .
                     "Dear {$guestName},\n\n" .
-                    "You are invited to attend:\n" .
-                    ($event['name'] ?? 'Official Event') . "\n\n" .
+                    "You are cordially invited to: " . ($event['name'] ?? '') . "\n" .
                     "Date: {$eventDate}\n" .
                     "Time: {$eventTime}\n" .
-                    "Venue: " . ($event['venue'] ?? 'To be announced') . "\n\n" .
-                    "ATTENDANCE CHECK-IN TOKEN: {$token}\n" .
+                    "Venue: " . ($event['venue'] ?? '') . "\n\n" .
+                    "YOUR ACCESS TOKEN: {$token}\n\n" .
                     "Present this 5-character token at the reception desk to complete check-in.\n\n" .
                     "We look forward to welcoming you.\n\n" .
                     "Yours sincerely,\n" .
@@ -355,16 +255,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mail->send();
                 $emailSent = true;
 
-                $stmt = $pdo->prepare("
-                    INSERT INTO audit_logs (user_id, action, description)
-                    VALUES (?, ?, ?)
-                ");
-                $stmt->execute([
-                    current_user()['id'],
+                mongo_audit_log(
                     'Invitation Email Sent',
                     'Email submitted successfully to ' . $guestEmail .
                     ' for invitation #' . $invitationId . ' (token: ' . $token . ').'
-                ]);
+                );
 
             } catch (Throwable $mailError) {
                 error_log(
@@ -381,22 +276,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Create announcement notification for receiver
             try {
-                $invMsg = 'You have received an invitation to join ' . $event['name'] . '.';
-                $pdo->prepare("INSERT INTO announcements (title, message, created_by) VALUES (?, ?, ?)")
-                    ->execute([
-                        'Event Invitation: ' . $event['name'],
-                        $invMsg . ' Date: ' . $eventDate . ' | Venue: ' . ($event['venue'] ?? 'To be announced') . '. Actions: [Accept] [Decline] [View Details]',
-                        current_user()['id']
-                    ]);
+                $invMsg = 'You have received an invitation to join ' . ($event['name'] ?? '') . '.';
+                $annId = mongo_next_id('announcements');
+                $eventDateStr = !empty($event['event_date']) ? date('l, F j, Y', strtotime($event['event_date'])) : 'Date TBD';
+                mcoll('announcements')->insertOne([
+                    'id' => $annId,
+                    'title' => 'Event Invitation: ' . ($event['name'] ?? ''),
+                    'message' => $invMsg . ' Date: ' . $eventDateStr . ' | Venue: ' . ($event['venue'] ?? 'To be announced') . '. Actions: [Accept] [Decline] [View Details]',
+                    'created_by' => current_user()['id'],
+                    'created_at' => $now
+                ]);
             } catch (Throwable $annEx) {
                 // Ignore announcement error
             }
 
         } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
             error_log('Invitation creation error: ' . $e->getMessage());
 
             flash(
@@ -405,10 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         }
 
-
-        redirect(
-            BASE_URL . '/invitations.php'
-        );
+        redirect(BASE_URL . '/invitations.php');
     }
 
 
@@ -421,7 +312,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $status = trim($_POST['status'] ?? '');
 
-
         $allowedStatuses = [
             'Pending',
             'Sent',
@@ -429,126 +319,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'Declined'
         ];
 
-
         if (
             !$id ||
             !in_array($status, $allowedStatuses, true)
         ) {
-
-            flash(
-                'error',
-                'Invalid invitation status.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+            flash('error', 'Invalid invitation status.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
 
         // Get invitation
-        $stmt = $pdo->prepare("
-            SELECT
-                i.*,
-                e.name AS event_name
-            FROM invitations i
-            LEFT JOIN events e
-                ON e.id = i.event_id
-            WHERE i.id = ?
-        ");
+        $invitationDoc = mcoll('invitations')->findOne(['id' => $id]);
 
-        $stmt->execute([$id]);
-
-        $invitation = $stmt->fetch();
-
-
-        if (!$invitation) {
-
-            flash(
-                'error',
-                'Invitation not found.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+        if (!$invitationDoc) {
+            flash('error', 'Invitation not found.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
+        $invitation = mongo_doc_to_array($invitationDoc);
 
         try {
+            $now = date('Y-m-d H:i:s');
+            $responded_at = ($status === 'Accepted' || $status === 'Declined') ? $now : null;
 
-            $pdo->beginTransaction();
-
-
-            /*
-             * Accepted / Declined means
-             * guest has responded.
-             *
-             * Sent / Pending keeps responded_at NULL.
-             */
-
-            if (
-                $status === 'Accepted' ||
-                $status === 'Declined'
-            ) {
-
-                $stmt = $pdo->prepare("
-                    UPDATE invitations
-                    SET
-                        status = ?,
-                        responded_at = NOW()
-                    WHERE id = ?
-                ");
-
-                $stmt->execute([
-                    $status,
-                    $id
-                ]);
-
-            } else {
-
-                $stmt = $pdo->prepare("
-                    UPDATE invitations
-                    SET
-                        status = ?,
-                        responded_at = NULL
-                    WHERE id = ?
-                ");
-
-                $stmt->execute([
-                    $status,
-                    $id
-                ]);
-            }
-
+            mcoll('invitations')->updateOne(
+                ['id' => $id],
+                ['$set' => [
+                    'status' => $status,
+                    'responded_at' => $responded_at
+                ]]
+            );
 
             // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
-                current_user()['id'],
+            mongo_audit_log(
                 'Invitation Status Updated',
                 'Invitation #' .
                 $id .
                 ' for ' .
-                $invitation['guest_name'] .
+                ($invitation['guest_name'] ?? '') .
                 ' changed to ' .
                 $status .
                 '.'
-            ]);
-
-
-            $pdo->commit();
-
+            );
 
             flash(
                 'success',
@@ -558,21 +368,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
             flash(
                 'error',
                 'Unable to update invitation status.'
             );
         }
 
-
-        redirect(
-            BASE_URL . '/invitations.php'
-        );
+        redirect(BASE_URL . '/invitations.php');
     }
 
 
@@ -584,82 +386,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $id = (int)($_POST['id'] ?? 0);
 
-
         if (!$id) {
-
-            flash(
-                'error',
-                'Invalid invitation.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+            flash('error', 'Invalid invitation.');
+            redirect(BASE_URL . '/invitations.php');
         }
 
+        $invitationDoc = mcoll('invitations')->findOne(['id' => $id]);
 
-        $stmt = $pdo->prepare("
-            SELECT id, guest_name
-            FROM invitations
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$id]);
-
-        $invitation = $stmt->fetch();
-
-
-        if (!$invitation) {
-
-            flash(
-                'error',
-                'Invitation not found.'
-            );
-
-            redirect(
-                BASE_URL . '/invitations.php'
-            );
+        if (!$invitationDoc) {
+            flash('error', 'Invitation not found.');
+            redirect(BASE_URL . '/invitations.php');
         }
-
+        $invitation = mongo_doc_to_array($invitationDoc);
 
         try {
-
-            $pdo->beginTransaction();
-
-
-            $stmt = $pdo->prepare("
-                DELETE FROM invitations
-                WHERE id = ?
-            ");
-
-            $stmt->execute([$id]);
-
+            mcoll('invitations')->deleteOne(['id' => $id]);
 
             // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
-                current_user()['id'],
+            mongo_audit_log(
                 'Invitation Deleted',
                 'Invitation #' .
                 $id .
                 ' for ' .
-                $invitation['guest_name'] .
+                ($invitation['guest_name'] ?? '') .
                 ' was deleted.'
-            ]);
-
-
-            $pdo->commit();
-
+            );
 
             flash(
                 'success',
@@ -667,21 +418,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
             flash(
                 'error',
                 'Unable to delete invitation.'
             );
         }
 
-
-        redirect(
-            BASE_URL . '/invitations.php'
-        );
+        redirect(BASE_URL . '/invitations.php');
     }
 }
 
@@ -696,130 +439,92 @@ $statusFilter = trim($_GET['status'] ?? '');
 
 
 // =====================================================
-// EVENTS
+// EVENTS (MongoDB Atlas)
 // =====================================================
 
-$events = $pdo->query("
-    SELECT
-        id,
-        name,
-        event_date,
-        event_time,
-        venue
-    FROM events
-    ORDER BY event_date DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
 
 // =====================================================
-// STATISTICS
+// STATISTICS (MongoDB Atlas)
 // =====================================================
 
 $stats = [
-
-    'total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM invitations
-    ")->fetchColumn(),
-
-    'pending' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM invitations
-        WHERE status = 'Pending'
-    ")->fetchColumn(),
-
-    'sent' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM invitations
-        WHERE status = 'Sent'
-    ")->fetchColumn(),
-
-    'accepted' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM invitations
-        WHERE status = 'Accepted'
-    ")->fetchColumn(),
-
-    'declined' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM invitations
-        WHERE status = 'Declined'
-    ")->fetchColumn()
+    'total' => mcoll('invitations')->countDocuments([]),
+    'pending' => mcoll('invitations')->countDocuments(['status' => 'Pending']),
+    'sent' => mcoll('invitations')->countDocuments(['status' => 'Sent']),
+    'accepted' => mcoll('invitations')->countDocuments(['status' => 'Accepted']),
+    'declined' => mcoll('invitations')->countDocuments(['status' => 'Declined'])
 ];
 
 
 // =====================================================
-// INVITATION QUERY
+// INVITATION QUERY (MongoDB Atlas Aggregation Pipeline)
 // =====================================================
 
-$sql = "
-    SELECT
-        i.*,
-        e.name AS event_name,
-        e.event_date
-    FROM invitations i
-    LEFT JOIN events e
-        ON e.id = i.event_id
-    WHERE 1=1
-";
+$pipeline = [];
 
-$params = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
 
+$pipeline[] = [
+    '$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'event_date' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_date', 0]], '']]
+    ]
+];
 
-// Search
+$pipeline[] = [
+    '$project' => [
+        'event_docs' => 0
+    ]
+];
+
+$match = [];
 
 if ($search !== '') {
-
-    $sql .= "
-        AND (
-            i.guest_name LIKE ?
-            OR i.guest_email LIKE ?
-            OR e.name LIKE ?
-        )
-    ";
-
-    $term = '%' . $search . '%';
-
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
+    $regex = new MongoDB\BSON\Regex($search, 'i');
+    $match['$or'] = [
+        ['guest_name' => $regex],
+        ['guest_email' => $regex],
+        ['event_name' => $regex]
+    ];
 }
 
-
-// Event filter
-
-if ($eventFilter) {
-
-    $sql .= "
-        AND i.event_id = ?
-    ";
-
-    $params[] = $eventFilter;
+if ($eventFilter > 0) {
+    $match['event_id'] = $eventFilter;
 }
-
-
-// Status filter
 
 if ($statusFilter !== '') {
-
-    $sql .= "
-        AND i.status = ?
-    ";
-
-    $params[] = $statusFilter;
+    $match['status'] = $statusFilter;
 }
 
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
+}
 
-$sql .= "
-    ORDER BY i.invited_at DESC
-";
+$pipeline[] = [
+    '$sort' => [
+        'invited_at' => -1,
+        'id' => -1
+    ]
+];
 
-
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute($params);
-
-$rows = $stmt->fetchAll();
+$cursor = mcoll('invitations')->aggregate($pipeline);
+$rows = [];
+foreach ($cursor as $doc) {
+    $rows[] = mongo_doc_to_array($doc);
+}
 
 
 // =====================================================

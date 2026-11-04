@@ -1,14 +1,13 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
 $page_title = 'Military Protocol | BUP Protocol';
-
 
 /*
 |--------------------------------------------------------------------------
-| POST ACTIONS
+| POST ACTIONS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -20,7 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('error', 'Protocol requirements are managed strictly by Military Protocol command units and administrators.');
         redirect(BASE_URL . '/protocol.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -35,77 +33,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $instructions = trim($_POST['instructions'] ?? '');
 
         if ($event_id <= 0 || $item === '') {
-
-            flash(
-                'error',
-                'Event and protocol requirement are required.'
-            );
-
+            flash('error', 'Event and protocol requirement are required.');
             redirect(BASE_URL . '/protocol.php');
         }
 
+        // Put new item after existing items for this event
+        $highestOrderDoc = mcoll('protocol_items')->findOne(
+            ['event_id' => $event_id],
+            ['sort' => ['sort_order' => -1]]
+        );
+        $next_order = $highestOrderDoc ? ((int)($highestOrderDoc['sort_order'] ?? 0) + 1) : 1;
 
-        /*
-        | Put new item after existing items for this event
-        */
-
-        $stmt = $pdo->prepare("
-            SELECT COALESCE(MAX(sort_order), 0)
-            FROM protocol_items
-            WHERE event_id = ?
-        ");
-
-        $stmt->execute([$event_id]);
-
-        $next_order = ((int)$stmt->fetchColumn()) + 1;
-
-
-        $stmt = $pdo->prepare("
-            INSERT INTO protocol_items
-            (
-                event_id,
-                item,
-                instructions,
-                completed,
-                sort_order
-            )
-            VALUES (?, ?, ?, ?, ?)
-        ");
-
-        $stmt->execute([
-            $event_id,
-            $item,
-            $instructions,
-            0,
-            $next_order
+        $protocol_id = mongo_next_id('protocol_items');
+        mcoll('protocol_items')->insertOne([
+            'id' => $protocol_id,
+            'event_id' => $event_id,
+            'item' => $item,
+            'instructions' => $instructions,
+            'completed' => 0,
+            'sort_order' => $next_order,
+            'created_at' => date('Y-m-d H:i:s')
         ]);
 
-
-        $protocol_id = $pdo->lastInsertId();
-
-
-        /*
-        | Audit log
-        */
-
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
+        mongo_audit_log(
             'Protocol Item Added',
             'Added protocol item #' . $protocol_id . ' — ' . $item
-        ]);
-
-
-        flash(
-            'success',
-            'Protocol checklist item added successfully.'
         );
 
+        flash('success', 'Protocol checklist item added successfully.');
         redirect(BASE_URL . '/protocol.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -118,56 +75,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($id > 0) {
+            $protocolDoc = mcoll('protocol_items')->findOne(['id' => $id]);
 
-            /*
-            | Get current status and item name
-            */
+            if ($protocolDoc) {
+                $protocol = mongo_doc_to_array($protocolDoc);
+                $new_status = !empty($protocol['completed']) ? 0 : 1;
 
-            $stmt = $pdo->prepare("
-                SELECT item, completed
-                FROM protocol_items
-                WHERE id = ?
-            ");
+                mcoll('protocol_items')->updateOne(
+                    ['id' => $id],
+                    ['$set' => ['completed' => $new_status]]
+                );
 
-            $stmt->execute([$id]);
-
-            $protocol = $stmt->fetch();
-
-
-            if ($protocol) {
-
-                $new_status = $protocol['completed'] ? 0 : 1;
-
-
-                $pdo->prepare("
-                    UPDATE protocol_items
-                    SET completed = ?
-                    WHERE id = ?
-                ")->execute([
-                    $new_status,
-                    $id
-                ]);
-
-
-                $pdo->prepare("
-                    INSERT INTO audit_logs(user_id, action, description)
-                    VALUES (?, ?, ?)
-                ")->execute([
-                    current_user()['id'],
-                    $new_status
-                        ? 'Protocol Completed'
-                        : 'Protocol Reopened',
-                    ($new_status
-                        ? 'Completed protocol item #'
-                        : 'Reopened protocol item #'
-                    ) . $id . ' — ' . $protocol['item']
-                ]);
+                mongo_audit_log(
+                    $new_status ? 'Protocol Completed' : 'Protocol Reopened',
+                    ($new_status ? 'Completed protocol item #' : 'Reopened protocol item #') . $id . ' — ' . ($protocol['item'] ?? '')
+                );
             }
         }
 
         redirect(BASE_URL . '/protocol.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -182,56 +109,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $item = trim($_POST['item'] ?? '');
         $instructions = trim($_POST['instructions'] ?? '');
 
-        if (
-            $id <= 0 ||
-            $event_id <= 0 ||
-            $item === ''
-        ) {
-
-            flash(
-                'error',
-                'Invalid protocol information.'
-            );
-
+        if ($id <= 0 || $event_id <= 0 || $item === '') {
+            flash('error', 'Invalid protocol information.');
             redirect(BASE_URL . '/protocol.php');
         }
 
-
-        $stmt = $pdo->prepare("
-            UPDATE protocol_items
-            SET
-                event_id = ?,
-                item = ?,
-                instructions = ?
-            WHERE id = ?
-        ");
-
-        $stmt->execute([
-            $event_id,
-            $item,
-            $instructions,
-            $id
-        ]);
-
-
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
-            'Protocol Item Updated',
-            'Updated protocol item #' . $id . ' — ' . $item
-        ]);
-
-
-        flash(
-            'success',
-            'Protocol requirement updated successfully.'
+        mcoll('protocol_items')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'event_id' => $event_id,
+                'item' => $item,
+                'instructions' => $instructions,
+                'updated_at' => date('Y-m-d H:i:s')
+            ]]
         );
 
+        mongo_audit_log(
+            'Protocol Item Updated',
+            'Updated protocol item #' . $id . ' — ' . $item
+        );
+
+        flash('success', 'Protocol requirement updated successfully.');
         redirect(BASE_URL . '/protocol.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -244,40 +144,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($id > 0) {
+            $protocolDoc = mcoll('protocol_items')->findOne(['id' => $id]);
 
-            $stmt = $pdo->prepare("
-                SELECT item
-                FROM protocol_items
-                WHERE id = ?
-            ");
+            if ($protocolDoc) {
+                $protocol = mongo_doc_to_array($protocolDoc);
+                mcoll('protocol_items')->deleteOne(['id' => $id]);
 
-            $stmt->execute([$id]);
-
-            $protocol = $stmt->fetch();
-
-
-            if ($protocol) {
-
-                $pdo->prepare("
-                    DELETE FROM protocol_items
-                    WHERE id = ?
-                ")->execute([$id]);
-
-
-                $pdo->prepare("
-                    INSERT INTO audit_logs(user_id, action, description)
-                    VALUES (?, ?, ?)
-                ")->execute([
-                    current_user()['id'],
+                mongo_audit_log(
                     'Protocol Item Deleted',
-                    'Deleted protocol item #' . $id . ' — ' . $protocol['item']
-                ]);
-
-
-                flash(
-                    'success',
-                    'Protocol requirement deleted successfully.'
+                    'Deleted protocol item #' . $id . ' — ' . ($protocol['item'] ?? '')
                 );
+
+                flash('success', 'Protocol requirement deleted successfully.');
             }
         }
 
@@ -311,25 +189,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($title !== '' && $objectives !== '') {
             $year = date('Y');
-            $countStmt = $pdo->query("SELECT COUNT(*) FROM military_event_requests WHERE request_id LIKE 'REQ-{$year}-%'");
-            $nextNum = str_pad((int)$countStmt->fetchColumn() + 1, 3, '0', STR_PAD_LEFT);
+            $yearPrefix = "REQ-{$year}-";
+            $countYear = mcoll('military_event_requests')->countDocuments([
+                'request_id' => ['$regex' => '^' . preg_quote($yearPrefix, '/')]
+            ]);
+            $nextNum = str_pad((int)$countYear + 1, 3, '0', STR_PAD_LEFT);
             $req_id = "REQ-{$year}-{$nextNum}";
 
-            $stmt = $pdo->prepare("
-                INSERT INTO military_event_requests 
-                (request_id, title, event_type, proposed_date, proposed_venue, objectives, required_protocol, attached_sops, special_instructions, priority, status, requested_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?)
-            ");
-            $stmt->execute([
-                $req_id, $title, $event_type, $proposed_date, $proposed_venue, $objectives, $required_protocol, $attached_sops, $special_instructions, $priority, $u['id']
+            $newReqDbId = mongo_next_id('military_event_requests');
+            mcoll('military_event_requests')->insertOne([
+                'id' => $newReqDbId,
+                'request_id' => $req_id,
+                'title' => $title,
+                'event_type' => $event_type,
+                'proposed_date' => $proposed_date,
+                'proposed_venue' => $proposed_venue,
+                'objectives' => $objectives,
+                'required_protocol' => $required_protocol,
+                'attached_sops' => $attached_sops,
+                'special_instructions' => $special_instructions,
+                'priority' => $priority,
+                'status' => 'Submitted',
+                'requested_by' => $u['id'],
+                'created_at' => date('Y-m-d H:i:s')
             ]);
 
             // Notify Civil Event Directors (L1) and Admins
-            $directors = $pdo->query("SELECT id FROM users WHERE (level = 'L1' OR role IN ('Event Director', 'Admin')) AND status = 'Active'")->fetchAll(PDO::FETCH_COLUMN);
-            foreach ($directors as $did) {
+            $directorsCursor = mcoll('users')->find([
+                'status' => 'Active',
+                '$or' => [
+                    ['level' => 'L1'],
+                    ['role' => ['$in' => ['Event Director', 'Admin']]]
+                ]
+            ]);
+            foreach ($directorsCursor as $dirDoc) {
                 if (function_exists('add_user_notification')) {
                     add_user_notification(
-                        (int)$did,
+                        (int)$dirDoc['id'],
                         'Military Event Directive: ' . $req_id,
                         'Higher Command issued event directive "' . $title . '" (Priority: ' . $priority . ').',
                         'announcement',
@@ -338,12 +234,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([$u['id'], 'Military Event Directive Submitted', "Promulgated directive {$req_id} — {$title}"]);
-
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('military_event_requests');
-            }
+            mongo_audit_log(
+                $u['id'],
+                'Military Event Directive Submitted',
+                "Promulgated directive {$req_id} — {$title}"
+            );
 
             flash('success', "Military Event Directive {$req_id} successfully issued to Civil Event Directorate.");
         } else {
@@ -366,18 +261,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $req_db_id = (int)($_POST['request_id'] ?? 0);
         $decision = $_POST['decision'] ?? '';
 
-        $chkStmt = $pdo->prepare("SELECT * FROM military_event_requests WHERE id = ?");
-        $chkStmt->execute([$req_db_id]);
-        $req = $chkStmt->fetch();
+        $reqDoc = mcoll('military_event_requests')->findOne(['id' => $req_db_id]);
 
-        if ($req) {
+        if ($reqDoc) {
+            $req = mongo_doc_to_array($reqDoc);
+            $now = date('Y-m-d H:i:s');
+
             if ($decision === 'accept') {
-                $pdo->prepare("UPDATE military_event_requests SET status = 'Approved' WHERE id = ?")->execute([$req_db_id]);
+                mcoll('military_event_requests')->updateOne(
+                    ['id' => $req_db_id],
+                    ['$set' => ['status' => 'Approved', 'updated_at' => $now]]
+                );
                 if (function_exists('add_user_notification')) {
                     add_user_notification(
                         (int)$req['requested_by'],
-                        'Military Directive Accepted: ' . $req['request_id'],
-                        'Civil Event Director approved directive "' . $req['title'] . '". Event creation authorized.',
+                        'Military Directive Accepted: ' . ($req['request_id'] ?? ''),
+                        'Civil Event Director approved directive "' . ($req['title'] ?? '') . '". Event creation authorized.',
                         'system',
                         BASE_URL . '/protocol.php'
                     );
@@ -385,12 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', "Military Directive {$req['request_id']} has been Accepted. You may now create the event.");
             } elseif ($decision === 'clarify') {
                 $msg = trim($_POST['clarification_message'] ?? '');
-                $pdo->prepare("UPDATE military_event_requests SET status = 'Clarification Requested', clarification_message = ? WHERE id = ?")
-                    ->execute([$msg, $req_db_id]);
+                mcoll('military_event_requests')->updateOne(
+                    ['id' => $req_db_id],
+                    ['$set' => ['status' => 'Clarification Requested', 'clarification_message' => $msg, 'updated_at' => $now]]
+                );
                 if (function_exists('add_user_notification')) {
                     add_user_notification(
                         (int)$req['requested_by'],
-                        'Clarification Requested: ' . $req['request_id'],
+                        'Clarification Requested: ' . ($req['request_id'] ?? ''),
                         'Civil Event Director requested clarification: "' . $msg . '"',
                         'system',
                         BASE_URL . '/protocol.php'
@@ -399,22 +300,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', "Clarification request dispatched to Military Higher Command.");
             } elseif ($decision === 'reject') {
                 $reason = trim($_POST['rejection_reason'] ?? '');
-                $pdo->prepare("UPDATE military_event_requests SET status = 'Rejected', rejection_reason = ? WHERE id = ?")
-                    ->execute([$reason, $req_db_id]);
+                mcoll('military_event_requests')->updateOne(
+                    ['id' => $req_db_id],
+                    ['$set' => ['status' => 'Rejected', 'rejection_reason' => $reason, 'updated_at' => $now]]
+                );
                 if (function_exists('add_user_notification')) {
                     add_user_notification(
                         (int)$req['requested_by'],
-                        'Military Directive Rejected: ' . $req['request_id'],
+                        'Military Directive Rejected: ' . ($req['request_id'] ?? ''),
                         'Civil Event Director was unable to proceed. Reason: "' . $reason . '"',
                         'system',
                         BASE_URL . '/protocol.php'
                     );
                 }
                 flash('success', "Military Directive {$req['request_id']} marked as Rejected.");
-            }
-
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('military_event_requests');
             }
         }
         redirect(BASE_URL . '/protocol.php');
@@ -436,23 +335,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $unit_id = (int)($_POST['unit_id'] ?? 0);
 
         if ($title !== '' && $target_user_id > 0) {
-            $stmt = $pdo->prepare("
-                INSERT INTO duties (event_id, title, department, level, location, time_slot, priority, assigned_to, assigned_by, status, created_at)
-                VALUES (?, ?, 'Protocol', ?, ?, ?, ?, ?, ?, 'Assigned', NOW())
-            ");
-            $stmt->execute([$event_id, $title, $subordinate_level, $location, $time_slot, $priority, $target_user_id, current_user()['id']]);
-            $dutyId = (int)$pdo->lastInsertId();
+            $dutyId = mongo_next_id('duties');
+            $now = date('Y-m-d H:i:s');
+            mcoll('duties')->insertOne([
+                'id' => $dutyId,
+                'event_id' => $event_id,
+                'title' => $title,
+                'department' => 'Protocol',
+                'level' => $subordinate_level,
+                'location' => $location,
+                'time_slot' => $time_slot,
+                'priority' => $priority,
+                'assigned_to' => $target_user_id,
+                'assigned_by' => current_user()['id'],
+                'status' => 'Assigned',
+                'created_at' => $now
+            ]);
 
             if (function_exists('notify_duty_assignment')) {
                 notify_duty_assignment($dutyId, $title, 'Protocol', $subordinate_level, $target_user_id, (int)current_user()['id']);
             }
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'], 'Military Echelon Duty Delegated', "Assigned tactical duty '{$title}' to subordinate personnel #{$target_user_id}"]);
-
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('duties');
-            }
+            mongo_audit_log(
+                current_user()['id'],
+                'Military Echelon Duty Delegated',
+                "Assigned tactical duty '{$title}' to subordinate personnel #{$target_user_id}"
+            );
 
             flash('success', "Operational directive '{$title}' successfully delegated to subordinate echelon.");
         } else {
@@ -472,12 +380,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $unit_id = (int)($_POST['unit_id'] ?? 0);
 
         if ($duty_id > 0) {
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $duty_id]);
+            mcoll('duties')->updateOne(
+                ['id' => $duty_id],
+                ['$set' => ['status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')]]
+            );
+
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($duty_id, $new_status, (int)current_user()['id']);
             }
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'], 'Soldier Post Duty Updated', "Soldier set duty #{$duty_id} status to {$new_status}"]);
+
+            mongo_audit_log(
+                current_user()['id'],
+                'Soldier Post Duty Updated',
+                "Soldier set duty #{$duty_id} status to {$new_status}"
+            );
+
             flash('success', "Soldier post duty marked as: {$new_status}");
         }
         redirect(BASE_URL . '/protocol.php' . ($unit_id > 0 ? '?unit_id=' . $unit_id . '#command-detail' : ''));
@@ -498,23 +415,36 @@ $status_filter = $_GET['status'] ?? '';
 
 /*
 |--------------------------------------------------------------------------
-| EVENTS
+| EVENTS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$events = $pdo->query("
-    SELECT id, name
-    FROM events
-    ORDER BY event_date DESC, event_time DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1, 'event_time' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
-/* Fetch Military Event Requests & Statistics */
-$event_requests = $pdo->query("
-    SELECT r.*, u.name as requester_name, u.designation as requester_designation
-    FROM military_event_requests r
-    LEFT JOIN users u ON u.id = r.requested_by
-    ORDER BY r.id DESC
-")->fetchAll();
+/* Fetch Military Event Requests & Statistics (MongoDB Atlas) */
+$reqPipeline = [
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'requested_by',
+        'foreignField' => 'id',
+        'as' => 'requester_docs'
+    ]],
+    ['$addFields' => [
+        'requester_name' => ['$ifNull' => [['$arrayElemAt' => ['$requester_docs.name', 0]], '']],
+        'requester_designation' => ['$ifNull' => [['$arrayElemAt' => ['$requester_docs.designation', 0]], '']]
+    ]],
+    ['$project' => ['requester_docs' => 0]],
+    ['$sort' => ['id' => -1]]
+];
+$reqCursor = mcoll('military_event_requests')->aggregate($reqPipeline);
+$event_requests = [];
+foreach ($reqCursor as $rDoc) {
+    $event_requests[] = mongo_doc_to_array($rDoc);
+}
 
 $req_stats = [
     'total' => count($event_requests),
@@ -525,14 +455,21 @@ $req_stats = [
     'rejected' => 0
 ];
 foreach ($event_requests as $er) {
-    if ($er['status'] === 'Submitted' || $er['status'] === 'Under Review') $req_stats['submitted']++;
-    elseif ($er['status'] === 'Clarification Requested') $req_stats['clarification']++;
-    elseif ($er['status'] === 'Approved') $req_stats['approved']++;
-    elseif ($er['status'] === 'Converted to Event') $req_stats['converted']++;
-    elseif ($er['status'] === 'Rejected' || $er['status'] === 'Declined') $req_stats['rejected']++;
+    if (($er['status'] ?? '') === 'Submitted' || ($er['status'] ?? '') === 'Under Review') $req_stats['submitted']++;
+    elseif (($er['status'] ?? '') === 'Clarification Requested') $req_stats['clarification']++;
+    elseif (($er['status'] ?? '') === 'Approved') $req_stats['approved']++;
+    elseif (($er['status'] ?? '') === 'Converted to Event') $req_stats['converted']++;
+    elseif (($er['status'] ?? '') === 'Rejected' || ($er['status'] ?? '') === 'Declined') $req_stats['rejected']++;
 }
 
-$promulgated_sops = $pdo->query("SELECT id, code, title, category FROM military_sops WHERE status IN ('Active', 'Approved') ORDER BY code ASC")->fetchAll();
+$promulgatedSopsCursor = mcoll('military_sops')->find(
+    ['status' => ['$in' => ['Active', 'Approved']]],
+    ['sort' => ['code' => 1]]
+);
+$promulgated_sops = [];
+foreach ($promulgatedSopsCursor as $sopDoc) {
+    $promulgated_sops[] = mongo_doc_to_array($sopDoc);
+}
 
 
 /*
@@ -545,25 +482,11 @@ $edit_id = (int)($_GET['edit'] ?? 0);
 $edit_item = null;
 
 if ($edit_id > 0) {
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM protocol_items
-        WHERE id = ?
-    ");
-
-    $stmt->execute([$edit_id]);
-
-    $edit_item = $stmt->fetch();
-
-
-    if (!$edit_item) {
-
-        flash(
-            'error',
-            'Protocol requirement not found.'
-        );
-
+    $itemDoc = mcoll('protocol_items')->findOne(['id' => $edit_id]);
+    if ($itemDoc) {
+        $edit_item = mongo_doc_to_array($itemDoc);
+    } else {
+        flash('error', 'Protocol requirement not found.');
         redirect(BASE_URL . '/protocol.php');
     }
 }
@@ -571,92 +494,65 @@ if ($edit_id > 0) {
 
 /*
 |--------------------------------------------------------------------------
-| PROTOCOL QUERY
+| PROTOCOL QUERY (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$sql = "
-    SELECT
-        p.*,
-        e.name AS event_name,
-        e.event_date,
-        e.event_time
-    FROM protocol_items p
-    LEFT JOIN events e
-        ON e.id = p.event_id
-    WHERE 1
-";
+$pipeline = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
+$pipeline[] = [
+    '$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'event_date' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_date', 0]], '']],
+        'event_time' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_time', 0]], '']]
+    ]
+];
+$pipeline[] = [
+    '$project' => ['event_docs' => 0]
+];
 
-$params = [];
-
-
-/*
-| Search
-*/
-
+$match = [];
 if ($q !== '') {
-
-    $sql .= "
-        AND (
-            p.item LIKE ?
-            OR p.instructions LIKE ?
-            OR e.name LIKE ?
-        )
-    ";
-
-    $search = '%' . $q . '%';
-
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $match['$or'] = [
+        ['item' => $regex],
+        ['instructions' => $regex],
+        ['event_name' => $regex]
+    ];
 }
-
-
-/*
-| Event filter
-*/
-
 if ($event_filter > 0) {
-
-    $sql .= " AND p.event_id = ?";
-
-    $params[] = $event_filter;
+    $match['event_id'] = $event_filter;
 }
-
-
-/*
-| Completion filter
-*/
-
 if ($status_filter === 'Completed') {
-
-    $sql .= " AND p.completed = 1";
-
+    $match['completed'] = 1;
+} elseif ($status_filter === 'Pending') {
+    $match['completed'] = 0;
+}
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
 }
 
-elseif ($status_filter === 'Pending') {
+$pipeline[] = [
+    '$sort' => [
+        'event_date' => -1,
+        'event_time' => -1,
+        'sort_order' => 1,
+        'id' => 1
+    ]
+];
 
-    $sql .= " AND p.completed = 0";
+$itemsCursor = mcoll('protocol_items')->aggregate($pipeline);
+$items = [];
+foreach ($itemsCursor as $pDoc) {
+    $items[] = mongo_doc_to_array($pDoc);
 }
-
-
-/*
-| Ordering
-*/
-
-$sql .= "
-    ORDER BY
-        e.event_date DESC,
-        e.event_time DESC,
-        p.sort_order ASC,
-        p.id ASC
-";
-
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-
-$items = $stmt->fetchAll();
 
 
 /*
@@ -666,19 +562,16 @@ $items = $stmt->fetchAll();
 */
 
 $total_items = count($items);
-
 $completed_count = 0;
 $pending_count = 0;
 
 foreach ($items as $item) {
-
-    if ((int)$item['completed'] === 1) {
+    if ((int)($item['completed'] ?? 0) === 1) {
         $completed_count++;
     } else {
         $pending_count++;
     }
 }
-
 
 $completion_percentage = $total_items > 0
     ? round(($completed_count / $total_items) * 100)
@@ -686,7 +579,7 @@ $completion_percentage = $total_items > 0
 
 /*
 |--------------------------------------------------------------------------
-| MILITARY PROTOCOL HIERARCHY LOGIC & PERMISSION BOUNDARIES
+| MILITARY PROTOCOL HIERARCHY LOGIC & PERMISSION BOUNDARIES (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -707,38 +600,60 @@ $is_director_or_admin = is_event_director() || has_role('Admin') || is_event_coo
 $user_rank = $user_proto_level ? ($protocol_ranks[$user_proto_level] ?? 8) : ($is_director_or_admin ? 0 : 8);
 
 // Fetch all units in protocol hierarchy
-$units_stmt = $pdo->query("
-    SELECT
-        u.*,
-        u.name AS unit_name,
-        u.code AS unit_code,
-        u.level AS protocol_level,
-        u.parent_id AS parent_unit_id,
-        u.commander_id AS commander_user_id,
-        u.hq_location AS location,
-        12 AS strength,
-        usr.name AS commander_name,
-        usr.email AS commander_email,
-        usr.phone AS commander_phone,
-        usr.designation AS commander_designation,
-        p_unit.name AS parent_unit_name,
-        p_unit.level AS parent_unit_level
-    FROM military_protocol_units u
-    LEFT JOIN users usr ON usr.id = u.commander_id
-    LEFT JOIN military_protocol_units p_unit ON p_unit.id = u.parent_id
-    ORDER BY u.sort_order ASC, u.id ASC
-");
-$all_protocol_units = $units_stmt->fetchAll();
+$unitPipeline = [
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'commander_id',
+        'foreignField' => 'id',
+        'as' => 'commander_docs'
+    ]],
+    ['$lookup' => [
+        'from' => 'military_protocol_units',
+        'localField' => 'parent_id',
+        'foreignField' => 'id',
+        'as' => 'parent_docs'
+    ]],
+    ['$addFields' => [
+        'unit_name' => '$name',
+        'unit_code' => '$code',
+        'protocol_level' => '$level',
+        'parent_unit_id' => '$parent_id',
+        'commander_user_id' => '$commander_id',
+        'location' => '$hq_location',
+        'strength' => 12,
+        'commander_name' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.name', 0]], null]],
+        'commander_email' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.email', 0]], null]],
+        'commander_phone' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.phone', 0]], null]],
+        'commander_designation' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.designation', 0]], null]],
+        'parent_unit_name' => ['$ifNull' => [['$arrayElemAt' => ['$parent_docs.name', 0]], null]],
+        'parent_unit_level' => ['$ifNull' => [['$arrayElemAt' => ['$parent_docs.level', 0]], null]]
+    ]],
+    ['$project' => ['commander_docs' => 0, 'parent_docs' => 0]],
+    ['$sort' => ['sort_order' => 1, 'id' => 1]]
+];
 
-// Fetch official military SOPs and rulebook instructions (Requirement 5)
-$militarySops = $pdo->query("SELECT * FROM military_sops WHERE status = 'Active' ORDER BY id ASC")->fetchAll();
+$unitsCursor = mcoll('military_protocol_units')->aggregate($unitPipeline);
+$all_protocol_units = [];
+foreach ($unitsCursor as $uDoc) {
+    $all_protocol_units[] = mongo_doc_to_array($uDoc);
+}
+
+// Fetch official military SOPs and rulebook instructions
+$militarySopsCursor = mcoll('military_sops')->find(
+    ['status' => 'Active'],
+    ['sort' => ['id' => 1]]
+);
+$militarySops = [];
+foreach ($militarySopsCursor as $sopDoc) {
+    $militarySops[] = mongo_doc_to_array($sopDoc);
+}
 
 // Unit inspection selection
 $inspect_id = (int)($_GET['unit_id'] ?? 0);
 if ($inspect_id === 0 && !empty($all_protocol_units)) {
     if ($user_proto_level) {
         foreach ($all_protocol_units as $pu) {
-            if ($pu['protocol_level'] === $user_proto_level || $pu['level'] === $user_proto_level) {
+            if (($pu['protocol_level'] ?? '') === $user_proto_level || ($pu['level'] ?? '') === $user_proto_level) {
                 $inspect_id = (int)$pu['id'];
                 break;
             }
@@ -765,6 +680,7 @@ if ($inspect_id > 0) {
     if ($inspected_unit) {
         $uLevel = $inspected_unit['protocol_level'] ?? $inspected_unit['level'] ?? 'Individual Soldier';
         $unit_rank = $protocol_ranks[$uLevel] ?? 8;
+
         // Permission boundary: Division L2 operational workspace is restricted from Higher Command (L1) direct manipulation
         if ($user_proto_level === 'Higher Command' && ($uLevel === 'Division' || (int)$inspected_unit['id'] === 2)) {
             $inspect_authorized = false;
@@ -774,42 +690,66 @@ if ($inspect_id > 0) {
         } else {
             $inspect_authorized = true;
             // Fetch children
-            $child_stmt = $pdo->prepare("
-                SELECT
-                    u.*,
-                    u.name AS unit_name,
-                    u.code AS unit_code,
-                    u.level AS protocol_level,
-                    u.parent_id AS parent_unit_id,
-                    u.commander_id AS commander_user_id,
-                    u.hq_location AS location,
-                    usr.name AS commander_name,
-                    usr.designation AS commander_designation
-                FROM military_protocol_units u
-                LEFT JOIN users usr ON usr.id = u.commander_id
-                WHERE u.parent_id = ?
-                ORDER BY u.sort_order ASC, u.id ASC
-            ");
-            $child_stmt->execute([$inspect_id]);
-            $child_units = $child_stmt->fetchAll();
+            $childPipeline = [
+                ['$match' => ['parent_id' => $inspect_id]],
+                ['$lookup' => [
+                    'from' => 'users',
+                    'localField' => 'commander_id',
+                    'foreignField' => 'id',
+                    'as' => 'commander_docs'
+                ]],
+                ['$addFields' => [
+                    'unit_name' => '$name',
+                    'unit_code' => '$code',
+                    'protocol_level' => '$level',
+                    'parent_unit_id' => '$parent_id',
+                    'commander_user_id' => '$commander_id',
+                    'location' => '$hq_location',
+                    'commander_name' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.name', 0]], null]],
+                    'commander_designation' => ['$ifNull' => [['$arrayElemAt' => ['$commander_docs.designation', 0]], null]]
+                ]],
+                ['$project' => ['commander_docs' => 0]],
+                ['$sort' => ['sort_order' => 1, 'id' => 1]]
+            ];
+            $childCursor = mcoll('military_protocol_units')->aggregate($childPipeline);
+            $child_units = [];
+            foreach ($childCursor as $cDoc) {
+                $child_units[] = mongo_doc_to_array($cDoc);
+            }
 
             // Fetch duties assigned to commander or protocol unit
             $cmd_id = (int)($inspected_unit['commander_id'] ?? $inspected_unit['commander_user_id'] ?? 0);
             if ($cmd_id > 0) {
-                $dut_stmt = $pdo->prepare("
-                    SELECT d.*, e.name AS event_name
-                    FROM duties d
-                    LEFT JOIN events e ON e.id = d.event_id
-                    WHERE d.assigned_to = ? OR d.department = 'Protocol'
-                    ORDER BY d.duty_date DESC
-                    LIMIT 6
-                ");
-                $dut_stmt->execute([$cmd_id]);
-                $unit_duties = $dut_stmt->fetchAll();
+                $dutyPipeline = [
+                    ['$match' => [
+                        '$or' => [
+                            ['assigned_to' => $cmd_id],
+                            ['department' => 'Protocol']
+                        ]
+                    ]],
+                    ['$lookup' => [
+                        'from' => 'events',
+                        'localField' => 'event_id',
+                        'foreignField' => 'id',
+                        'as' => 'event_docs'
+                    ]],
+                    ['$addFields' => [
+                        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']]
+                    ]],
+                    ['$project' => ['event_docs' => 0]],
+                    ['$sort' => ['duty_date' => -1]],
+                    ['$limit' => 6]
+                ];
+                $dutyCursor = mcoll('duties')->aggregate($dutyPipeline);
+                $unit_duties = [];
+                foreach ($dutyCursor as $dDoc) {
+                    $unit_duties[] = mongo_doc_to_array($dDoc);
+                }
             }
         }
     }
 }
+
 
 require __DIR__ . '/includes/header.php';
 ?>

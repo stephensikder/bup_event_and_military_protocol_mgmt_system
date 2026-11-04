@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 // View-only restriction: enforce Student role or Admin viewing student perspective
@@ -7,52 +8,96 @@ if (!is_student() && !has_role('Admin') && !is_event_director()) {
     redirect(get_role_redirect_url());
 }
 
-$pdo = db();
 $user = current_user();
 $page_title = 'Student Dashboard | BUP Protocol';
 
 // View parameter for sub-pages
 $activeTab = $_GET['tab'] ?? 'overview';
 
-// 1. Fetch relevant upcoming events
-$events = $pdo->query("
-    SELECT id, name as title, event_type, venue, event_date, event_time, status, description
-    FROM events
-    WHERE status IN ('Upcoming', 'Ongoing')
-    ORDER BY event_date ASC, event_time ASC
-")->fetchAll();
+// 1. Fetch relevant upcoming events (MongoDB Atlas)
+$eventDocs = mcoll('events')->find(
+    ['status' => ['$in' => ['Upcoming', 'Ongoing']]],
+    ['sort' => ['event_date' => 1, 'event_time' => 1]]
+);
+$events = [];
+foreach ($eventDocs as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['title'] = $row['name'] ?? '';
+    $events[] = $row;
+}
 
-// 2. Fetch announcements / notifications
-$announcements = $pdo->query("
-    SELECT a.*, u.name as publisher_name, u.role as publisher_role
-    FROM announcements a
-    LEFT JOIN users u ON u.id = a.created_by
-    ORDER BY a.created_at DESC
-    LIMIT 10
-")->fetchAll();
+// 2. Fetch announcements / notifications (MongoDB Atlas)
+$annPipeline = [
+    ['$sort' => ['created_at' => -1]],
+    ['$limit' => 10],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'created_by',
+            'foreignField' => 'id',
+            'as' => 'pub_user'
+        ]
+    ],
+    ['$unwind' => ['path' => '$pub_user', 'preserveNullAndEmptyArrays' => true]]
+];
+$cursor = mcoll('announcements')->aggregate($annPipeline);
+$announcements = [];
+foreach ($cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['publisher_name'] = $row['pub_user']['name'] ?? null;
+    $row['publisher_role'] = $row['pub_user']['role'] ?? null;
+    unset($row['pub_user']);
+    $announcements[] = $row;
+}
 
-// 3. Fetch emergency contacts
-$emergencyContacts = $pdo->query("
-    SELECT * FROM emergency_contacts
-    ORDER BY department ASC, name ASC
-")->fetchAll();
+// 3. Fetch emergency contacts (MongoDB Atlas)
+$emDocs = mcoll('emergency_contacts')->find([], ['sort' => ['department' => 1, 'name' => 1]]);
+$emergencyContacts = [];
+foreach ($emDocs as $doc) {
+    $emergencyContacts[] = mongo_doc_to_array($doc);
+}
 
-// 4. Fetch venue & seating status summary
-$venueStatus = $pdo->query("
-    SELECT venue, COUNT(*) as event_count
-    FROM events
-    WHERE status IN ('Upcoming', 'Ongoing')
-    GROUP BY venue
-")->fetchAll();
+// 4. Fetch venue & seating status summary (MongoDB Atlas Aggregations)
+$venuePipeline = [
+    ['$match' => ['status' => ['$in' => ['Upcoming', 'Ongoing']]]],
+    ['$group' => [
+        '_id' => '$venue',
+        'event_count' => ['$sum' => 1]
+    ]],
+    ['$project' => [
+        'venue' => '$_id',
+        'event_count' => 1,
+        '_id' => 0
+    ]]
+];
+$venueStatus = [];
+foreach (mcoll('events')->aggregate($venuePipeline) as $doc) {
+    $venueStatus[] = mongo_doc_to_array($doc);
+}
 
-$seatingSummary = $pdo->query("
-    SELECT e.name as event_title, e.venue,
-           COUNT(sa.id) as assigned_seats
-    FROM events e
-    LEFT JOIN seating_assignments sa ON sa.event_id = e.id
-    WHERE e.status IN ('Upcoming', 'Ongoing')
-    GROUP BY e.id
-")->fetchAll();
+$seatingPipeline = [
+    ['$match' => ['status' => ['$in' => ['Upcoming', 'Ongoing']]]],
+    [
+        '$lookup' => [
+            'from' => 'seating_assignments',
+            'localField' => 'id',
+            'foreignField' => 'event_id',
+            'as' => 'seats'
+        ]
+    ],
+    [
+        '$project' => [
+            'id' => 1,
+            'event_title' => '$name',
+            'venue' => 1,
+            'assigned_seats' => ['$size' => '$seats']
+        ]
+    ]
+];
+$seatingSummary = [];
+foreach (mcoll('events')->aggregate($seatingPipeline) as $doc) {
+    $seatingSummary[] = mongo_doc_to_array($doc);
+}
 
 require __DIR__ . '/includes/header.php';
 ?>

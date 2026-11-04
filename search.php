@@ -1,10 +1,10 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
-
+$u = current_user();
 $page_title = 'Advanced Search | BUP Protocol';
 
 $q = trim($_GET['q'] ?? '');
@@ -20,287 +20,356 @@ $announcements = [];
 
 $totalResults = 0;
 
-
 /*
 |--------------------------------------------------------------------------
-| SEARCH
+| SEARCH (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 if ($q !== '') {
-
-    $like = '%' . $q . '%';
-
+    $searchRegex = new MongoDB\BSON\Regex(preg_quote($q, '/'), 'i');
 
     /*
     |--------------------------------------------------------------------------
     | EVENTS
     |--------------------------------------------------------------------------
     */
-
-    $stmt = $pdo->prepare("
-        SELECT
-            id,
-            name,
-            event_type,
-            event_date,
-            event_time,
-            venue,
-            status,
-            priority
-        FROM events
-        WHERE
-            name LIKE ?
-            OR event_type LIKE ?
-            OR venue LIKE ?
-            OR description LIKE ?
-            OR status LIKE ?
-        ORDER BY event_date DESC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like,
-        $like,
-        $like,
-        $like
+    $eventDocs = mcoll('events')->find([
+        '$or' => [
+            ['name' => $searchRegex],
+            ['event_type' => $searchRegex],
+            ['venue' => $searchRegex],
+            ['description' => $searchRegex],
+            ['status' => $searchRegex]
+        ]
+    ], [
+        'sort' => ['event_date' => -1],
+        'limit' => 30
     ]);
-
-    $events = $stmt->fetchAll();
-
+    foreach ($eventDocs as $doc) {
+        $events[] = mongo_doc_to_array($doc);
+    }
 
     /*
     |--------------------------------------------------------------------------
     | GUESTS
     |--------------------------------------------------------------------------
     */
+    if (!is_student()) {
+        $guestPipeline = [
+            [
+                '$match' => [
+                    '$or' => [
+                        ['name' => $searchRegex],
+                        ['designation' => $searchRegex],
+                        ['organization' => $searchRegex],
+                        ['phone' => $searchRegex],
+                        ['email' => $searchRegex],
+                        ['category' => $searchRegex],
+                        ['priority_level' => $searchRegex],
+                        ['arrival_status' => $searchRegex]
+                    ]
+                ]
+            ],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$event',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            [
+                '$sort' => ['name' => 1]
+            ],
+            [
+                '$limit' => 30
+            ]
+        ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            g.*,
-            e.name AS event_name
-        FROM guests g
-        LEFT JOIN events e
-            ON e.id = g.event_id
-        WHERE
-            g.name LIKE ?
-            OR g.designation LIKE ?
-            OR g.organization LIKE ?
-            OR g.phone LIKE ?
-            OR g.email LIKE ?
-            OR g.category LIKE ?
-            OR g.priority_level LIKE ?
-            OR g.arrival_status LIKE ?
-        ORDER BY g.name ASC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like,
-        $like,
-        $like,
-        $like,
-        $like,
-        $like,
-        $like
-    ]);
-
-    $guests = $stmt->fetchAll();
-
+        $cursor = mcoll('guests')->aggregate($guestPipeline);
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            unset($row['event']);
+            $guests[] = $row;
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | DUTIES
     |--------------------------------------------------------------------------
     */
+    $dutyMatch = [
+        '$or' => [
+            ['title' => $searchRegex],
+            ['description' => $searchRegex],
+            ['status' => $searchRegex]
+        ]
+    ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            d.*,
-            e.name AS event_name,
-            u.name AS assigned_name
-        FROM duties d
-        LEFT JOIN events e
-            ON e.id = d.event_id
-        LEFT JOIN users u
-            ON u.id = d.assigned_to
-        WHERE
-            d.title LIKE ?
-            OR d.description LIKE ?
-            OR d.status LIKE ?
-        ORDER BY d.due_at ASC
-        LIMIT 30
-    ");
+    if (is_staff()) {
+        $dutyMatch['$and'] = [
+            [
+                '$or' => [
+                    ['assigned_to' => (int)$u['id']],
+                    ['department' => $u['department'] ?? '']
+                ]
+            ]
+        ];
+    } elseif (is_student()) {
+        $dutyMatch = null; // Students cannot inspect operational duties
+    }
 
-    $stmt->execute([
-        $like,
-        $like,
-        $like
-    ]);
+    if ($dutyMatch !== null) {
+        $dutyPipeline = [
+            ['$match' => $dutyMatch],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$event',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            [
+                '$lookup' => [
+                    'from' => 'users',
+                    'localField' => 'assigned_to',
+                    'foreignField' => 'id',
+                    'as' => 'assigned_user'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$assigned_user',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            ['$sort' => ['due_at' => 1]],
+            ['$limit' => 30]
+        ];
 
-    $duties = $stmt->fetchAll();
-
+        $cursor = mcoll('duties')->aggregate($dutyPipeline);
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            $row['assigned_name'] = $row['assigned_user']['name'] ?? null;
+            unset($row['event'], $row['assigned_user']);
+            $duties[] = $row;
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | PROTOCOL
     |--------------------------------------------------------------------------
     */
+    if (is_military_protocol() || has_role('Admin') || is_event_director()) {
+        $protoPipeline = [
+            [
+                '$match' => [
+                    '$or' => [
+                        ['item' => $searchRegex],
+                        ['instructions' => $searchRegex]
+                    ]
+                ]
+            ],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$event',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            ['$sort' => ['sort_order' => 1]],
+            ['$limit' => 30]
+        ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            p.*,
-            e.name AS event_name
-        FROM protocol_items p
-        LEFT JOIN events e
-            ON e.id = p.event_id
-        WHERE
-            p.item LIKE ?
-            OR p.instructions LIKE ?
-        ORDER BY p.sort_order ASC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like
-    ]);
-
-    $protocol = $stmt->fetchAll();
-
+        $cursor = mcoll('protocol_items')->aggregate($protoPipeline);
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            unset($row['event']);
+            $protocol[] = $row;
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | INVITATIONS
     |--------------------------------------------------------------------------
     */
+    if (!is_student()) {
+        $invPipeline = [
+            [
+                '$match' => [
+                    '$or' => [
+                        ['guest_name' => $searchRegex],
+                        ['guest_email' => $searchRegex],
+                        ['status' => $searchRegex]
+                    ]
+                ]
+            ],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$event',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            ['$sort' => ['invited_at' => -1]],
+            ['$limit' => 30]
+        ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            i.*,
-            e.name AS event_name
-        FROM invitations i
-        LEFT JOIN events e
-            ON e.id = i.event_id
-        WHERE
-            i.guest_name LIKE ?
-            OR i.guest_email LIKE ?
-            OR i.status LIKE ?
-        ORDER BY i.invited_at DESC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like,
-        $like
-    ]);
-
-    $invitations = $stmt->fetchAll();
-
+        $cursor = mcoll('invitations')->aggregate($invPipeline);
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            unset($row['event']);
+            $invitations[] = $row;
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | TRANSPORT
     |--------------------------------------------------------------------------
     */
+    if (!is_student()) {
+        $transPipeline = [
+            [
+                '$match' => [
+                    '$or' => [
+                        ['guest_name' => $searchRegex],
+                        ['vehicle_no' => $searchRegex],
+                        ['driver_name' => $searchRegex],
+                        ['parking_slot' => $searchRegex],
+                        ['accommodation' => $searchRegex]
+                    ]
+                ]
+            ],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            [
+                '$unwind' => [
+                    'path' => '$event',
+                    'preserveNullAndEmptyArrays' => true
+                ]
+            ],
+            ['$sort' => ['created_at' => -1]],
+            ['$limit' => 30]
+        ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            t.*,
-            e.name AS event_name
-        FROM transport t
-        LEFT JOIN events e
-            ON e.id = t.event_id
-        WHERE
-            t.guest_name LIKE ?
-            OR t.vehicle_no LIKE ?
-            OR t.driver_name LIKE ?
-            OR t.parking_slot LIKE ?
-            OR t.accommodation LIKE ?
-        ORDER BY t.created_at DESC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like,
-        $like,
-        $like,
-        $like
-    ]);
-
-    $transport = $stmt->fetchAll();
-
+        $cursor = mcoll('transport')->aggregate($transPipeline);
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            unset($row['event']);
+            $transport[] = $row;
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | EMERGENCY CONTACTS
     |--------------------------------------------------------------------------
     */
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM emergency_contacts
-        WHERE
-            name LIKE ?
-            OR designation LIKE ?
-            OR phone LIKE ?
-            OR department LIKE ?
-            OR notes LIKE ?
-        ORDER BY name ASC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like,
-        $like,
-        $like,
-        $like
+    $emDocs = mcoll('emergency_contacts')->find([
+        '$or' => [
+            ['name' => $searchRegex],
+            ['designation' => $searchRegex],
+            ['phone' => $searchRegex],
+            ['department' => $searchRegex],
+            ['notes' => $searchRegex]
+        ]
+    ], [
+        'sort' => ['name' => 1],
+        'limit' => 30
     ]);
-
-    $emergency = $stmt->fetchAll();
-
+    foreach ($emDocs as $doc) {
+        $emergency[] = mongo_doc_to_array($doc);
+    }
 
     /*
     |--------------------------------------------------------------------------
     | ANNOUNCEMENTS
     |--------------------------------------------------------------------------
     */
+    $annPipeline = [
+        [
+            '$match' => [
+                '$or' => [
+                    ['title' => $searchRegex],
+                    ['message' => $searchRegex]
+                ]
+            ]
+        ],
+        [
+            '$lookup' => [
+                'from' => 'users',
+                'localField' => 'created_by',
+                'foreignField' => 'id',
+                'as' => 'pub_user'
+            ]
+        ],
+        [
+            '$unwind' => [
+                'path' => '$pub_user',
+                'preserveNullAndEmptyArrays' => true
+            ]
+        ],
+        ['$sort' => ['created_at' => -1]],
+        ['$limit' => 30]
+    ];
 
-    $stmt = $pdo->prepare("
-        SELECT
-            a.*,
-            u.name AS publisher_name
-        FROM announcements a
-        LEFT JOIN users u
-            ON u.id = a.created_by
-        WHERE
-            a.title LIKE ?
-            OR a.message LIKE ?
-        ORDER BY a.created_at DESC
-        LIMIT 30
-    ");
-
-    $stmt->execute([
-        $like,
-        $like
-    ]);
-
-    $announcements = $stmt->fetchAll();
-
+    $cursor = mcoll('announcements')->aggregate($annPipeline);
+    foreach ($cursor as $doc) {
+        $row = mongo_doc_to_array($doc);
+        $row['publisher_name'] = $row['pub_user']['name'] ?? null;
+        unset($row['pub_user']);
+        $announcements[] = $row;
+    }
 
     /*
     |--------------------------------------------------------------------------
-    | TOTAL
+    | TOTAL RESULTS
     |--------------------------------------------------------------------------
     */
-
-    $totalResults =
-        count($events)
+    $totalResults = count($events)
         + count($guests)
         + count($duties)
         + count($protocol)
@@ -309,13 +378,6 @@ if ($q !== '') {
         + count($emergency)
         + count($announcements);
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| HEADER
-|--------------------------------------------------------------------------
-*/
 
 require __DIR__ . '/includes/header.php';
 

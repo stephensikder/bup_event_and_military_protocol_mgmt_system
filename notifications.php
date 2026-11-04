@@ -1,26 +1,21 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
-
-$pdo = db();
 
 $page_title = 'Announcements | BUP Protocol';
 
-
 // =====================================================
-// HANDLE POST ACTIONS
+// HANDLE POST ACTIONS (MongoDB Atlas)
 // =====================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $action = $_POST['action'] ?? '';
-
 
     // -------------------------------------------------
     // PUBLISH ANNOUNCEMENT
     // -------------------------------------------------
-
     if ($action === 'publish') {
         if (is_staff()) {
             flash('error', 'Staff members cannot publish announcements.');
@@ -30,113 +25,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $message = trim($_POST['message'] ?? '');
 
-
         if ($title === '' || $message === '') {
-
-            flash(
-                'error',
-                'Title and message are required.'
-            );
-
-            redirect(
-                BASE_URL . '/notifications.php'
-            );
+            flash('error', 'Title and message are required.');
+            redirect(BASE_URL . '/notifications.php');
         }
-
 
         if (mb_strlen($title) > 200) {
-
-            flash(
-                'error',
-                'Announcement title is too long.'
-            );
-
-            redirect(
-                BASE_URL . '/notifications.php'
-            );
+            flash('error', 'Announcement title is too long.');
+            redirect(BASE_URL . '/notifications.php');
         }
-
 
         try {
+            $announcementId = mongo_next_id('announcements');
+            $currentUser = current_user();
+            $userId = (int)($currentUser['id'] ?? 0);
+            $now = date('Y-m-d H:i:s');
 
-            $pdo->beginTransaction();
-
-
-            $stmt = $pdo->prepare("
-                INSERT INTO announcements
-                (
-                    title,
-                    message,
-                    created_by
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
-                $title,
-                $message,
-                current_user()['id']
+            mcoll('announcements')->insertOne([
+                'id' => $announcementId,
+                'title' => $title,
+                'message' => $message,
+                'created_by' => $userId,
+                'created_at' => $now
             ]);
 
-
-            $announcementId =
-                (int)$pdo->lastInsertId();
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
-                current_user()['id'],
+            mongo_audit_log(
+                $userId,
                 'Announcement Published',
-                'Announcement #' .
-                $announcementId .
-                ' "' .
-                $title .
-                '" was published.'
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Announcement published successfully.'
+                'Announcement #' . $announcementId . ' "' . $title . '" was published.'
             );
 
+            flash('success', 'Announcement published successfully.');
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to publish announcement.'
-            );
+            flash('error', 'Unable to publish announcement: ' . $e->getMessage());
         }
 
-
-        redirect(
-            BASE_URL . '/notifications.php'
-        );
+        redirect(BASE_URL . '/notifications.php');
     }
-
 
     // -------------------------------------------------
     // DELETE ANNOUNCEMENT
     // -------------------------------------------------
-
     if ($action === 'delete') {
         if (is_staff()) {
             flash('error', 'Staff members cannot delete announcements.');
@@ -145,201 +74,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $id = (int)($_POST['id'] ?? 0);
 
-
         if (!$id) {
-
-            flash(
-                'error',
-                'Invalid announcement.'
-            );
-
-            redirect(
-                BASE_URL . '/notifications.php'
-            );
+            flash('error', 'Invalid announcement.');
+            redirect(BASE_URL . '/notifications.php');
         }
 
+        $announcementDoc = mcoll('announcements')->findOne(['id' => $id]);
 
-        $stmt = $pdo->prepare("
-            SELECT id, title
-            FROM announcements
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$id]);
-
-        $announcement = $stmt->fetch();
-
-
-        if (!$announcement) {
-
-            flash(
-                'error',
-                'Announcement not found.'
-            );
-
-            redirect(
-                BASE_URL . '/notifications.php'
-            );
+        if (!$announcementDoc) {
+            flash('error', 'Announcement not found.');
+            redirect(BASE_URL . '/notifications.php');
         }
 
+        $announcement = mongo_doc_to_array($announcementDoc);
 
         try {
+            mcoll('announcements')->deleteOne(['id' => $id]);
 
-            $pdo->beginTransaction();
-
-
-            $stmt = $pdo->prepare("
-                DELETE FROM announcements
-                WHERE id = ?
-            ");
-
-            $stmt->execute([$id]);
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 current_user()['id'],
                 'Announcement Deleted',
-                'Announcement #' .
-                $announcement['id'] .
-                ' "' .
-                $announcement['title'] .
-                '" was deleted.'
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Announcement deleted successfully.'
+                'Announcement #' . $announcement['id'] . ' "' . ($announcement['title'] ?? '') . '" was deleted.'
             );
 
+            flash('success', 'Announcement deleted successfully.');
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to delete announcement.'
-            );
+            flash('error', 'Unable to delete announcement.');
         }
 
-
-        redirect(
-            BASE_URL . '/notifications.php'
-        );
+        redirect(BASE_URL . '/notifications.php');
     }
 }
-
 
 // =====================================================
 // SEARCH
 // =====================================================
-
 $search = trim($_GET['q'] ?? '');
 
+// =====================================================
+// ANNOUNCEMENT STATISTICS (MongoDB Atlas)
+// =====================================================
+$todayPrefix = date('Y-m-d');
+$weekAgo = date('Y-m-d H:i:s', strtotime('-7 days'));
 
-// =====================================================
-// ANNOUNCEMENT STATISTICS
-// =====================================================
+$distinctPublishers = mcoll('announcements')->distinct('created_by', [
+    'created_by' => ['$ne' => null, '$exists' => true]
+]);
 
 $stats = [
-
-    'total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM announcements
-    ")->fetchColumn(),
-
-    'today' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM announcements
-        WHERE DATE(created_at) = CURDATE()
-    ")->fetchColumn(),
-
-    'this_week' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM announcements
-        WHERE created_at >= DATE_SUB(
-            NOW(),
-            INTERVAL 7 DAY
-        )
-    ")->fetchColumn(),
-
-    'publishers' => (int)$pdo->query("
-        SELECT COUNT(DISTINCT created_by)
-        FROM announcements
-        WHERE created_by IS NOT NULL
-    ")->fetchColumn()
-
+    'total' => mcoll('announcements')->countDocuments(),
+    'today' => mcoll('announcements')->countDocuments(['created_at' => ['$regex' => '^' . preg_quote($todayPrefix, '/')]]),
+    'this_week' => mcoll('announcements')->countDocuments(['created_at' => ['$gte' => $weekAgo]]),
+    'publishers' => count(array_filter($distinctPublishers, fn($v) => !is_null($v) && $v !== ''))
 ];
 
-
 // =====================================================
-// FETCH ANNOUNCEMENTS
+// FETCH ANNOUNCEMENTS (MongoDB Atlas Aggregation Pipeline)
 // =====================================================
-
-$sql = "
-    SELECT
-        a.*,
-        u.name AS publisher,
-        u.role AS publisher_role
-    FROM announcements a
-    LEFT JOIN users u
-        ON u.id = a.created_by
-    WHERE 1=1
-";
-
-$params = [];
-
+$pipeline = [
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'created_by',
+            'foreignField' => 'id',
+            'as' => 'pub_user'
+        ]
+    ],
+    [
+        '$unwind' => [
+            'path' => '$pub_user',
+            'preserveNullAndEmptyArrays' => true
+        ]
+    ]
+];
 
 if ($search !== '') {
-
-    $sql .= "
-        AND (
-            a.title LIKE ?
-            OR a.message LIKE ?
-            OR u.name LIKE ?
-        )
-    ";
-
-    $term = '%' . $search . '%';
-
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
+    $searchRegex = new MongoDB\BSON\Regex(preg_quote($search, '/'), 'i');
+    $pipeline[] = [
+        '$match' => [
+            '$or' => [
+                ['title' => $searchRegex],
+                ['message' => $searchRegex],
+                ['pub_user.name' => $searchRegex]
+            ]
+        ]
+    ];
 }
 
+$pipeline[] = [
+    '$sort' => [
+        'created_at' => -1,
+        'id' => -1
+    ]
+];
 
-$sql .= "
-    ORDER BY a.created_at DESC
-";
-
-
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute($params);
-
-$rows = $stmt->fetchAll();
-
-
-// =====================================================
-// HEADER
-// =====================================================
+$cursor = mcoll('announcements')->aggregate($pipeline);
+$rows = [];
+foreach ($cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['publisher'] = $row['pub_user']['name'] ?? null;
+    $row['publisher_role'] = $row['pub_user']['role'] ?? null;
+    unset($row['pub_user']);
+    $rows[] = $row;
+}
 
 require __DIR__ . '/includes/header.php';
 

@@ -3,8 +3,6 @@
 require_once __DIR__ . '/config/auth.php';
 require_login();
 
-$pdo = db();
-
 $page_title = 'My Profile | BUP Protocol';
 
 $userId = (int)current_user()['id'];
@@ -39,21 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
 
-        // Get current profile
-
-        $stmt = $pdo->prepare("
-            SELECT *
-            FROM users
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$userId]);
-
-        $existingUser = $stmt->fetch();
-
+        // Get current profile (MongoDB Atlas)
+        $existingUser = mongo_doc_to_array(mcoll('users')->findOne(['id' => $userId]));
 
         if (!$existingUser) {
-
             flash(
                 'error',
                 'User account could not be found.'
@@ -64,35 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         }
 
-
         try {
-
-            $pdo->beginTransaction();
-
-
             $reports_to_id = !empty($_POST['reports_to_id']) ? (int)$_POST['reports_to_id'] : null;
             $backup_person_id = !empty($_POST['backup_person_id']) ? (int)$_POST['backup_person_id'] : null;
 
-            // Update profile
-            $stmt = $pdo->prepare("
-                UPDATE users
-                SET
-                    name = ?,
-                    designation = ?,
-                    phone = ?,
-                    reports_to_id = ?,
-                    backup_person_id = ?
-                WHERE id = ?
-            ");
-
-            $stmt->execute([
-                $name,
-                $designation,
-                $phone,
-                $reports_to_id,
-                $backup_person_id,
-                $userId
-            ]);
+            $updateData = [
+                'name' => $name,
+                'designation' => $designation,
+                'phone' => $phone,
+                'reports_to_id' => $reports_to_id,
+                'backup_person_id' => $backup_person_id
+            ];
 
             // Handle Profile Picture Upload
             if (!empty($_FILES['avatar']['name']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
@@ -108,43 +77,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $targetPath = $uploadDir . $fileName;
                     if (move_uploaded_file($file['tmp_name'], $targetPath)) {
                         $avatarRelPath = 'assets/uploads/avatars/' . $fileName;
-                        $stmtAv = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
-                        $stmtAv->execute([$avatarRelPath, $userId]);
+                        $updateData['avatar'] = $avatarRelPath;
                         $_SESSION['user']['avatar'] = $avatarRelPath;
                     }
                 }
             }
 
+            // Update user in MongoDB Atlas
+            mcoll('users')->updateOne(
+                ['id' => $userId],
+                ['$set' => $updateData]
+            );
 
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            // Audit log in MongoDB Atlas
+            mongo_audit_log(
                 $userId,
                 'Profile Updated',
                 'User profile information was updated.'
-            ]);
-
-
-            $pdo->commit();
-            mongo_sync_table('users');
-
+            );
 
             // Update current session
-
             $_SESSION['user']['name'] = $name;
             $_SESSION['user']['designation'] = $designation;
             $_SESSION['user']['phone'] = $phone;
-
+            $_SESSION['user']['reports_to_id'] = $reports_to_id;
+            $_SESSION['user']['backup_person_id'] = $backup_person_id;
 
             flash(
                 'success',
@@ -152,17 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
             flash(
                 'error',
-                'Unable to update profile.'
+                'Unable to update profile: ' . $e->getMessage()
             );
         }
-
 
         redirect(
             BASE_URL . '/profile.php'
@@ -172,22 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 // =====================================================
-// FETCH CURRENT USER
+// FETCH CURRENT USER (MongoDB Atlas)
 // =====================================================
 
-$stmt = $pdo->prepare("
-    SELECT *
-    FROM users
-    WHERE id = ?
-");
-
-$stmt->execute([$userId]);
-
-$u = $stmt->fetch();
-
+$u = mongo_doc_to_array(mcoll('users')->findOne(['id' => $userId]));
 
 if (!$u) {
-
     flash(
         'error',
         'User account not found.'
@@ -200,23 +141,24 @@ if (!$u) {
 
 
 // =====================================================
-// ACCOUNT ACTIVITY
+// ACCOUNT ACTIVITY (MongoDB Atlas)
 // =====================================================
 
-$stmt = $pdo->prepare("
-    SELECT
-        action,
-        description,
-        created_at
-    FROM audit_logs
-    WHERE user_id = ?
-    ORDER BY created_at DESC
-    LIMIT 8
-");
-
-$stmt->execute([$userId]);
-
-$activity = $stmt->fetchAll();
+$activityCursor = mcoll('audit_logs')->find(
+    ['user_id' => $userId],
+    [
+        'sort' => ['created_at' => -1],
+        'limit' => 8
+    ]
+);
+$activity = [];
+foreach ($activityCursor as $actDoc) {
+    $item = mongo_doc_to_array($actDoc);
+    if (empty($item['description']) && !empty($item['details'])) {
+        $item['description'] = $item['details'];
+    }
+    $activity[] = $item;
+}
 
 
 /*
@@ -233,33 +175,42 @@ $accountStatus =
 
 /*
 |--------------------------------------------------------------------------
-| ROLE CLASS & ELIGIBLE USERS
+| ROLE CLASS & ELIGIBLE USERS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 $role = $u['role'] ?? 'User';
 
 // Eligible users for dropdowns
-$cand_stmt = $pdo->prepare("
-    SELECT id, name, role, level, department
-    FROM users
-    WHERE status = 'Active' AND id != ?
-    ORDER BY level ASC, name ASC
-");
-$cand_stmt->execute([$userId]);
-$backup_candidates = $cand_stmt->fetchAll();
+$candCursor = mcoll('users')->find(
+    ['status' => 'Active', 'id' => ['$ne' => $userId]],
+    [
+        'sort' => ['level' => 1, 'name' => 1],
+        'projection' => ['id' => 1, 'name' => 1, 'role' => 1, 'level' => 1, 'department' => 1]
+    ]
+);
+$backup_candidates = array_values(array_map('mongo_doc_to_array', iterator_to_array($candCursor)));
 
 // Assigned duties for current user
-$duties_stmt = $pdo->prepare("
-    SELECT d.*, e.name AS event_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    WHERE d.assigned_to = ?
-    ORDER BY d.duty_date DESC, d.start_time DESC
-    LIMIT 10
-");
-$duties_stmt->execute([$userId]);
-$my_duties = $duties_stmt->fetchAll();
+$dutiesPipeline = [
+    ['$match' => ['assigned_to' => $userId]],
+    ['$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event'
+    ]],
+    ['$sort' => ['duty_date' => -1, 'start_time' => -1]],
+    ['$limit' => 10]
+];
+$dutiesCursor = mcoll('duties')->aggregate($dutiesPipeline);
+$my_duties = [];
+foreach ($dutiesCursor as $dutyDoc) {
+    $arr = mongo_doc_to_array($dutyDoc);
+    $arr['event_name'] = !empty($arr['event'][0]['name']) ? $arr['event'][0]['name'] : 'N/A';
+    unset($arr['event']);
+    $my_duties[] = $arr;
+}
 
 
 /*

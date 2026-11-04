@@ -1,37 +1,36 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 
 require_login();
-
-$pdo = db();
 
 $id = (int) ($_GET['id'] ?? 0);
 
 
 /*
 |--------------------------------------------------------------------------
-| Event Information
+| Event Information (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$stmt = $pdo->prepare(
-    "SELECT
-        e.*,
-        u.name AS creator
-     FROM events e
-     LEFT JOIN users u
-        ON u.id = e.created_by
-     WHERE e.id = ?"
-);
+$eventPipeline = [
+    ['$match' => ['id' => $id]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'created_by',
+        'foreignField' => 'id',
+        'as' => 'creator_arr'
+    ]],
+    ['$addFields' => [
+        'creator' => ['$arrayElemAt' => ['$creator_arr.name', 0]]
+    ]]
+];
 
-$stmt->execute([$id]);
-
-$event = $stmt->fetch();
-
+$eventDocs = mcoll('events')->aggregate($eventPipeline)->toArray();
+$event = !empty($eventDocs) ? mongo_doc_to_array($eventDocs[0]) : null;
 
 if (!$event) {
-
     flash(
         'error',
         'Event not found.'
@@ -45,60 +44,51 @@ if (!$event) {
 
 /*
 |--------------------------------------------------------------------------
-| Guests
+| Guests (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$guest_stmt = $pdo->prepare(
-    "SELECT *
-     FROM guests
-     WHERE event_id = ?
-     ORDER BY priority_level DESC, name"
+$guestCursor = mcoll('guests')->find(
+    ['event_id' => $id],
+    ['sort' => ['priority_level' => -1, 'name' => 1]]
 );
-
-$guest_stmt->execute([$id]);
-
-$guests = $guest_stmt->fetchAll();
+$guests = array_values(array_map('mongo_doc_to_array', iterator_to_array($guestCursor)));
 
 
 /*
 |--------------------------------------------------------------------------
-| Duties
+| Duties (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$duty_stmt = $pdo->prepare(
-    "SELECT
-        d.*,
-        u.name AS assignee
-     FROM duties d
-     LEFT JOIN users u
-        ON u.id = d.assigned_to
-     WHERE d.event_id = ?
-     ORDER BY d.status, d.due_at"
-);
-
-$duty_stmt->execute([$id]);
-
-$duties = $duty_stmt->fetchAll();
+$dutyPipeline = [
+    ['$match' => ['event_id' => $id]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'assigned_to',
+        'foreignField' => 'id',
+        'as' => 'assignee_arr'
+    ]],
+    ['$addFields' => [
+        'assignee' => ['$arrayElemAt' => ['$assignee_arr.name', 0]]
+    ]],
+    ['$sort' => ['status' => 1, 'due_at' => 1]]
+];
+$dutiesDocs = mcoll('duties')->aggregate($dutyPipeline)->toArray();
+$duties = array_values(array_map('mongo_doc_to_array', $dutiesDocs));
 
 
 /*
 |--------------------------------------------------------------------------
-| Protocol Checklist
+| Protocol Checklist (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$protocol_stmt = $pdo->prepare(
-    "SELECT *
-     FROM protocol_items
-     WHERE event_id = ?
-     ORDER BY sort_order, id"
+$protocolCursor = mcoll('protocol_items')->find(
+    ['event_id' => $id],
+    ['sort' => ['sort_order' => 1, 'id' => 1]]
 );
-
-$protocol_stmt->execute([$id]);
-
-$protocol = $protocol_stmt->fetchAll();
+$protocol = array_values(array_map('mongo_doc_to_array', iterator_to_array($protocolCursor)));
 
 
 /*

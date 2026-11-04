@@ -1,125 +1,71 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
-
-$pdo = db();
 
 $page_title = 'Emergency Contacts | BUP Protocol';
 
-
 // =====================================================
-// HANDLE POST ACTIONS
+// POST ACTIONS (MongoDB Atlas)
 // =====================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
 
-
     // =================================================
-    // ADD CONTACT
+    // CREATE CONTACT
     // =================================================
 
-    if ($action === 'add') {
+    if ($action === 'create') {
 
         $name = trim($_POST['name'] ?? '');
-        $designation = trim($_POST['designation'] ?? '');
-        $phone = trim($_POST['phone'] ?? '');
         $department = trim($_POST['department'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $roleTitle = trim($_POST['role_title'] ?? '');
         $notes = trim($_POST['notes'] ?? '');
 
-
-        if ($name === '' || $phone === '') {
-
-            flash(
-                'error',
-                'Name and phone number are required.'
-            );
-
-            redirect(
-                BASE_URL . '/emergency.php'
-            );
+        if ($name === '' || $department === '' || $phone === '') {
+            flash('error', 'Name, department and phone are required.');
+            redirect(BASE_URL . '/emergency.php');
         }
-
 
         try {
+            $contactId = mongo_next_id('emergency_contacts');
+            $now = date('Y-m-d H:i:s');
 
-            $pdo->beginTransaction();
-
-
-            $stmt = $pdo->prepare("
-                INSERT INTO emergency_contacts
-                (
-                    name,
-                    designation,
-                    phone,
-                    department,
-                    notes
-                )
-                VALUES (?, ?, ?, ?, ?)
-            ");
-
-            $stmt->execute([
-                $name,
-                $designation,
-                $phone,
-                $department,
-                $notes
+            mcoll('emergency_contacts')->insertOne([
+                'id' => $contactId,
+                'name' => $name,
+                'department' => $department,
+                'phone' => $phone,
+                'role_title' => $roleTitle,
+                'notes' => $notes,
+                'created_at' => $now,
+                'updated_at' => $now
             ]);
 
-
-            $contactId =
-                (int)$pdo->lastInsertId();
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 current_user()['id'],
-                'Emergency Contact Added',
-                'Emergency contact "' .
+                'Emergency Contact Created',
+                'Emergency contact #' .
+                $contactId .
+                ' (' .
                 $name .
-                '" was added.'
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Emergency contact added successfully.'
+                ', ' .
+                $department .
+                ') was created.'
             );
+
+            flash('success', 'Emergency contact created successfully.');
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to add emergency contact.'
-            );
+            flash('error', 'Unable to create emergency contact.');
         }
 
-
-        redirect(
-            BASE_URL . '/emergency.php'
-        );
+        redirect(BASE_URL . '/emergency.php');
     }
-
 
     // =================================================
     // UPDATE CONTACT
@@ -128,130 +74,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update') {
 
         $id = (int)($_POST['id'] ?? 0);
-
         $name = trim($_POST['name'] ?? '');
-        $designation = trim($_POST['designation'] ?? '');
-        $phone = trim($_POST['phone'] ?? '');
         $department = trim($_POST['department'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $roleTitle = trim($_POST['role_title'] ?? '');
         $notes = trim($_POST['notes'] ?? '');
 
-
-        if (
-            !$id ||
-            $name === '' ||
-            $phone === ''
-        ) {
-
-            flash(
-                'error',
-                'Name and phone number are required.'
-            );
-
-            redirect(
-                BASE_URL . '/emergency.php'
-            );
+        if (!$id || $name === '' || $department === '' || $phone === '') {
+            flash('error', 'Invalid contact information provided.');
+            redirect(BASE_URL . '/emergency.php');
         }
 
+        $contactDoc = mcoll('emergency_contacts')->findOne(['id' => $id]);
 
-        $stmt = $pdo->prepare("
-            SELECT id, name
-            FROM emergency_contacts
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$id]);
-
-        $contact = $stmt->fetch();
-
-
-        if (!$contact) {
-
-            flash(
-                'error',
-                'Emergency contact not found.'
-            );
-
-            redirect(
-                BASE_URL . '/emergency.php'
-            );
+        if (!$contactDoc) {
+            flash('error', 'Emergency contact not found.');
+            redirect(BASE_URL . '/emergency.php');
         }
-
 
         try {
+            $now = date('Y-m-d H:i:s');
 
-            $pdo->beginTransaction();
+            mcoll('emergency_contacts')->updateOne(
+                ['id' => $id],
+                ['$set' => [
+                    'name' => $name,
+                    'department' => $department,
+                    'phone' => $phone,
+                    'role_title' => $roleTitle,
+                    'notes' => $notes,
+                    'updated_at' => $now
+                ]]
+            );
 
-
-            $stmt = $pdo->prepare("
-                UPDATE emergency_contacts
-                SET
-                    name = ?,
-                    designation = ?,
-                    phone = ?,
-                    department = ?,
-                    notes = ?
-                WHERE id = ?
-            ");
-
-            $stmt->execute([
-                $name,
-                $designation,
-                $phone,
-                $department,
-                $notes,
-                $id
-            ]);
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 current_user()['id'],
                 'Emergency Contact Updated',
                 'Emergency contact #' .
                 $id .
-                ' "' .
+                ' (' .
                 $name .
-                '" was updated.'
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Emergency contact updated successfully.'
+                ', ' .
+                $department .
+                ') was updated.'
             );
+
+            flash('success', 'Emergency contact updated successfully.');
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to update emergency contact.'
-            );
+            flash('error', 'Unable to update emergency contact.');
         }
 
-
-        redirect(
-            BASE_URL . '/emergency.php'
-        );
+        redirect(BASE_URL . '/emergency.php');
     }
-
 
     // =================================================
     // DELETE CONTACT
@@ -261,241 +136,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $id = (int)($_POST['id'] ?? 0);
 
-
         if (!$id) {
-
-            flash(
-                'error',
-                'Invalid emergency contact.'
-            );
-
-            redirect(
-                BASE_URL . '/emergency.php'
-            );
+            flash('error', 'Invalid emergency contact.');
+            redirect(BASE_URL . '/emergency.php');
         }
 
+        $contactDoc = mcoll('emergency_contacts')->findOne(['id' => $id]);
 
-        $stmt = $pdo->prepare("
-            SELECT id, name
-            FROM emergency_contacts
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$id]);
-
-        $contact = $stmt->fetch();
-
-
-        if (!$contact) {
-
-            flash(
-                'error',
-                'Emergency contact not found.'
-            );
-
-            redirect(
-                BASE_URL . '/emergency.php'
-            );
+        if (!$contactDoc) {
+            flash('error', 'Emergency contact not found.');
+            redirect(BASE_URL . '/emergency.php');
         }
-
+        $contact = mongo_doc_to_array($contactDoc);
 
         try {
+            mcoll('emergency_contacts')->deleteOne(['id' => $id]);
 
-            $pdo->beginTransaction();
-
-
-            $stmt = $pdo->prepare("
-                DELETE FROM emergency_contacts
-                WHERE id = ?
-            ");
-
-            $stmt->execute([$id]);
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 current_user()['id'],
                 'Emergency Contact Deleted',
                 'Emergency contact #' .
                 $id .
-                ' "' .
-                $contact['name'] .
-                '" was deleted.'
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Emergency contact deleted successfully.'
+                ' (' .
+                ($contact['name'] ?? '') .
+                ', ' .
+                ($contact['department'] ?? '') .
+                ') was deleted.'
             );
+
+            flash('success', 'Emergency contact deleted successfully.');
 
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to delete emergency contact.'
-            );
+            flash('error', 'Unable to delete emergency contact.');
         }
 
-
-        redirect(
-            BASE_URL . '/emergency.php'
-        );
+        redirect(BASE_URL . '/emergency.php');
     }
 }
 
-
 // =====================================================
-// SEARCH / FILTER
+// FILTERS
 // =====================================================
 
 $search = trim($_GET['q'] ?? '');
 $departmentFilter = trim($_GET['department'] ?? '');
 
+// =====================================================
+// DEPARTMENTS (MongoDB Atlas)
+// =====================================================
+
+$rawDepts = mcoll('emergency_contacts')->distinct('department');
+$departments = [];
+foreach ($rawDepts as $d) {
+    if (!empty($d)) {
+        $departments[] = ['department' => (string)$d];
+    }
+}
+usort($departments, fn($a, $b) => strcmp($a['department'], $b['department']));
 
 // =====================================================
-// DEPARTMENTS
-// =====================================================
-
-$departments = $pdo->query("
-    SELECT DISTINCT department
-    FROM emergency_contacts
-    WHERE department IS NOT NULL
-      AND department <> ''
-    ORDER BY department
-")->fetchAll(PDO::FETCH_COLUMN);
-
-
-// =====================================================
-// STATISTICS
+// STATISTICS (MongoDB Atlas)
 // =====================================================
 
 $stats = [
-
-    'total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM emergency_contacts
-    ")->fetchColumn(),
-
-    'departments' => (int)$pdo->query("
-        SELECT COUNT(DISTINCT department)
-        FROM emergency_contacts
-        WHERE department IS NOT NULL
-          AND department <> ''
-    ")->fetchColumn(),
-
-    'with_notes' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM emergency_contacts
-        WHERE notes IS NOT NULL
-          AND notes <> ''
-    ")->fetchColumn()
-
+    'total' => mcoll('emergency_contacts')->countDocuments([]),
+    'departments' => count($departments),
+    'with_notes' => mcoll('emergency_contacts')->countDocuments([
+        'notes' => ['$nin' => [null, '']]
+    ])
 ];
 
-
 // =====================================================
-// CONTACT QUERY
+// CONTACT QUERY (MongoDB Atlas)
 // =====================================================
 
-$sql = "
-    SELECT *
-    FROM emergency_contacts
-    WHERE 1=1
-";
-
-$params = [];
-
+$filter = [];
 
 if ($search !== '') {
-
-    $sql .= "
-        AND (
-            name LIKE ?
-            OR designation LIKE ?
-            OR phone LIKE ?
-            OR department LIKE ?
-            OR notes LIKE ?
-        )
-    ";
-
-    $term = '%' . $search . '%';
-
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
+    $regex = new MongoDB\BSON\Regex($search, 'i');
+    $filter['$or'] = [
+        ['name' => $regex],
+        ['department' => $regex],
+        ['phone' => $regex],
+        ['role_title' => $regex],
+        ['notes' => $regex]
+    ];
 }
-
 
 if ($departmentFilter !== '') {
-
-    $sql .= "
-        AND department = ?
-    ";
-
-    $params[] = $departmentFilter;
+    $filter['department'] = $departmentFilter;
 }
 
+$cursor = mcoll('emergency_contacts')->find(
+    $filter,
+    ['sort' => ['department' => 1, 'name' => 1]]
+);
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN department = 'Emergency Services'
-            THEN 1
-            WHEN department = 'Campus Security'
-            THEN 2
-            ELSE 3
-        END,
-        name ASC
-";
-
-
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute($params);
-
-$rows = $stmt->fetchAll();
-
+$rows = [];
+foreach ($cursor as $doc) {
+    $rows[] = mongo_doc_to_array($doc);
+}
 
 // =====================================================
 // EDIT CONTACT
 // =====================================================
 
 $editId = (int)($_GET['edit'] ?? 0);
-
 $editContact = null;
 
-if ($editId) {
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM emergency_contacts
-        WHERE id = ?
-    ");
-
-    $stmt->execute([$editId]);
-
-    $editContact = $stmt->fetch();
+if ($editId > 0) {
+    $editDoc = mcoll('emergency_contacts')->findOne(['id' => $editId]);
+    if ($editDoc) {
+        $editContact = mongo_doc_to_array($editDoc);
+    }
 }
 
 

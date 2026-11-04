@@ -1,29 +1,24 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
-
-$pdo = db();
 
 if (is_staff() || is_security_lead() || is_student()) {
     flash('error', 'Attendance management is restricted and not accessible for this role.');
     redirect(is_student() ? BASE_URL . '/student_dashboard.php' : BASE_URL . '/dashboard.php');
 }
 
-
-
 $page_title = 'Attendance & QR | BUP Protocol';
-
 
 /*
 |--------------------------------------------------------------------------
-| POST ACTIONS
+| POST ACTIONS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
-
 
     /*
     |--------------------------------------------------------------------------
@@ -36,90 +31,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $token = trim($_POST['token'] ?? '');
 
         if ($token === '') {
-
             flash('error', 'Please enter an attendance token.');
             redirect(BASE_URL . '/attendance.php');
         }
 
+        $pipeline = [
+            ['$match' => ['qr_token' => $token]],
+            ['$lookup' => [
+                'from' => 'guests',
+                'localField' => 'guest_id',
+                'foreignField' => 'id',
+                'as' => 'guest_docs'
+            ]],
+            ['$lookup' => [
+                'from' => 'events',
+                'localField' => 'event_id',
+                'foreignField' => 'id',
+                'as' => 'event_docs'
+            ]],
+            ['$addFields' => [
+                'guest_name' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.name', 0]], 'Guest']],
+                'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], 'Unknown Event']]
+            ]],
+            ['$project' => ['guest_docs' => 0, 'event_docs' => 0]],
+            ['$limit' => 1]
+        ];
 
-        $stmt = $pdo->prepare("
-            SELECT
-                a.*,
-                g.name AS guest_name,
-                e.name AS event_name
-            FROM attendance a
-            LEFT JOIN guests g
-                ON g.id = a.guest_id
-            LEFT JOIN events e
-                ON e.id = a.event_id
-            WHERE a.qr_token = ?
-            LIMIT 1
-        ");
-
-        $stmt->execute([$token]);
-
-        $row = $stmt->fetch();
-
-
-        if (!$row) {
-
-            flash(
-                'error',
-                'QR token not found.'
-            );
-
-            redirect(BASE_URL . '/attendance.php');
+        $cursor = mcoll('attendance')->aggregate($pipeline);
+        $row = null;
+        foreach ($cursor as $doc) {
+            $row = mongo_doc_to_array($doc);
+            break;
         }
 
+        if (!$row) {
+            flash('error', 'QR token not found.');
+            redirect(BASE_URL . '/attendance.php');
+        }
 
         /*
         | Prevent duplicate check-in
         */
 
-        if ($row['status'] === 'Present') {
-
-            flash(
-                'error',
-                'This guest is already marked as Present.'
-            );
-
+        if (($row['status'] ?? '') === 'Present') {
+            flash('error', 'This guest is already marked as Present.');
             redirect(BASE_URL . '/attendance.php');
         }
 
+        $now = date('Y-m-d H:i:s');
 
-        $pdo->prepare("
-            UPDATE attendance
-            SET
-                status = 'Present',
-                checkin_at = NOW()
-            WHERE id = ?
-        ")->execute([
-            $row['id']
-        ]);
+        mcoll('attendance')->updateOne(
+            ['id' => (int)$row['id']],
+            ['$set' => [
+                'status' => 'Present',
+                'checkin_at' => $now,
+                'check_in_time' => $now
+            ]]
+        );
 
         if (!empty($row['guest_id'])) {
-            $pdo->prepare("UPDATE guests SET arrival_status = 'Arrived' WHERE id = ?")->execute([$row['guest_id']]);
+            mcoll('guests')->updateOne(
+                ['id' => (int)$row['guest_id']],
+                ['$set' => ['arrival_status' => 'Arrived', 'updated_at' => $now]]
+            );
         }
 
         if (!empty($token)) {
-            $pdo->prepare("UPDATE invitations SET status = 'Accepted', responded_at = NOW() WHERE qr_token = ?")->execute([$token]);
+            mcoll('invitations')->updateOne(
+                ['qr_token' => $token],
+                ['$set' => ['status' => 'Accepted', 'responded_at' => $now]]
+            );
         }
 
         /*
         | Audit log
         */
 
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
+        mongo_audit_log(
             'Guest Check-in',
             'Checked in ' .
             ($row['guest_name'] ?? 'Guest') .
             ' for event ' .
             ($row['event_name'] ?? 'Unknown Event')
-        ]);
+        );
 
         flash(
             'success',
@@ -143,44 +137,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($id > 0) {
 
-            $stmt = $pdo->prepare("
-                SELECT
-                    a.*,
-                    g.name AS guest_name
-                FROM attendance a
-                LEFT JOIN guests g
-                    ON g.id = a.guest_id
-                WHERE a.id = ?
-            ");
+            $pipeline = [
+                ['$match' => ['id' => $id]],
+                ['$lookup' => [
+                    'from' => 'guests',
+                    'localField' => 'guest_id',
+                    'foreignField' => 'id',
+                    'as' => 'guest_docs'
+                ]],
+                ['$addFields' => [
+                    'guest_name' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.name', 0]], 'Guest']]
+                ]],
+                ['$limit' => 1]
+            ];
 
-            $stmt->execute([$id]);
-
-            $record = $stmt->fetch();
-
+            $cursor = mcoll('attendance')->aggregate($pipeline);
+            $record = null;
+            foreach ($cursor as $doc) {
+                $record = mongo_doc_to_array($doc);
+                break;
+            }
 
             if ($record) {
 
-                $pdo->prepare("
-                    UPDATE attendance
-                    SET
-                        status = 'Registered',
-                        checkin_at = NULL
-                    WHERE id = ?
-                ")->execute([
-                    $id
-                ]);
+                mcoll('attendance')->updateOne(
+                    ['id' => $id],
+                    ['$set' => [
+                        'status' => 'Registered',
+                        'checkin_at' => null,
+                        'check_in_time' => null
+                    ]]
+                );
 
-
-                $pdo->prepare("
-                    INSERT INTO audit_logs(user_id, action, description)
-                    VALUES (?, ?, ?)
-                ")->execute([
-                    current_user()['id'],
+                mongo_audit_log(
                     'Attendance Reset',
                     'Reset attendance for ' .
                     ($record['guest_name'] ?? 'Guest')
-                ]);
-
+                );
 
                 flash(
                     'success',
@@ -207,118 +200,108 @@ $status_filter = $_GET['status'] ?? '';
 
 /*
 |--------------------------------------------------------------------------
-| EVENTS
+| EVENTS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$events = $pdo->query("
-    SELECT id, name
-    FROM events
-    ORDER BY event_date DESC, event_time DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1, 'event_time' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| ATTENDANCE QUERY
+| ATTENDANCE QUERY (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$sql = "
-    SELECT
-        a.*,
-        g.name AS guest_name,
-        g.designation,
-        g.organization,
-        g.category,
-        g.priority_level,
-        e.name AS event_name,
-        e.event_date,
-        e.event_time
-    FROM attendance a
-    LEFT JOIN guests g
-        ON g.id = a.guest_id
-    LEFT JOIN events e
-        ON e.id = a.event_id
-    WHERE 1
-";
+$pipeline = [];
 
-$params = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'guests',
+        'localField' => 'guest_id',
+        'foreignField' => 'id',
+        'as' => 'guest_docs'
+    ]
+];
 
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
 
-/*
-| Search
-*/
+$pipeline[] = [
+    '$addFields' => [
+        'guest_name' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.name', 0]], '']],
+        'designation' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.designation', 0]], '']],
+        'organization' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.organization', 0]], '']],
+        'category' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.category', 0]], '']],
+        'priority_level' => ['$ifNull' => [['$arrayElemAt' => ['$guest_docs.priority_level', 0]], '']],
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'event_date' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_date', 0]], '']],
+        'event_time' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_time', 0]], '']],
+        'status_order' => [
+            '$cond' => [
+                'if' => ['$eq' => ['$status', 'Present']],
+                'then' => 1,
+                'else' => 2
+            ]
+        ]
+    ]
+];
+
+$pipeline[] = [
+    '$project' => [
+        'guest_docs' => 0,
+        'event_docs' => 0
+    ]
+];
+
+$match = [];
 
 if ($q !== '') {
-
-    $sql .= "
-        AND (
-            g.name LIKE ?
-            OR g.designation LIKE ?
-            OR g.organization LIKE ?
-            OR e.name LIKE ?
-            OR a.qr_token LIKE ?
-        )
-    ";
-
-    $search = '%' . $q . '%';
-
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $match['$or'] = [
+        ['guest_name' => $regex],
+        ['designation' => $regex],
+        ['organization' => $regex],
+        ['event_name' => $regex],
+        ['qr_token' => $regex]
+    ];
 }
-
-
-/*
-| Event filter
-*/
 
 if ($event_filter > 0) {
-
-    $sql .= "
-        AND a.event_id = ?
-    ";
-
-    $params[] = $event_filter;
+    $match['event_id'] = $event_filter;
 }
-
-
-/*
-| Status filter
-*/
 
 if ($status_filter !== '') {
-
-    $sql .= "
-        AND a.status = ?
-    ";
-
-    $params[] = $status_filter;
+    $match['status'] = $status_filter;
 }
 
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
+}
 
-/*
-| Latest first
-*/
+$pipeline[] = [
+    '$sort' => [
+        'status_order' => 1,
+        'checkin_at' => -1,
+        'id' => -1
+    ]
+];
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN a.status = 'Present' THEN 1
-            ELSE 2
-        END,
-        a.checkin_at DESC,
-        a.id DESC
-";
-
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-
-$records = $stmt->fetchAll();
+$cursor = mcoll('attendance')->aggregate($pipeline);
+$records = [];
+foreach ($cursor as $doc) {
+    $records[] = mongo_doc_to_array($doc);
+}
 
 
 /*
@@ -334,13 +317,12 @@ $registered = 0;
 
 foreach ($records as $record) {
 
-    if ($record['status'] === 'Present') {
+    if (($record['status'] ?? '') === 'Present') {
         $present++;
     } else {
         $registered++;
     }
 }
-
 
 $attendance_rate = $total > 0
     ? round(($present / $total) * 100)
@@ -369,7 +351,7 @@ foreach ($records as $record) {
 
     $event_summary[$event_name]['total']++;
 
-    if ($record['status'] === 'Present') {
+    if (($record['status'] ?? '') === 'Present') {
         $event_summary[$event_name]['present']++;
     }
 }

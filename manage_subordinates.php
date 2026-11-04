@@ -1,9 +1,9 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 $u = current_user();
-$pdo = db();
 $proto_lvl = $u['protocol_level'] ?? '';
 $is_admin = has_role('Admin') || is_event_director();
 
@@ -170,7 +170,7 @@ if (!isset($cfg['tabs'][$active_tab])) {
 $page_title = $cfg['title'] . ' | ' . ($cfg['tabs'][$active_tab] ?? 'Management');
 
 // =========================================================================
-// POST ACTIONS (DUTY PROGRESSION, EVIDENCE, DIRECTIVES, ISSUES, RESOURCES)
+// POST ACTIONS (DUTY PROGRESSION, EVIDENCE, DIRECTIVES, ISSUES, RESOURCES) - MongoDB Atlas
 // =========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -181,16 +181,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $new_status = in_array($_POST['status'] ?? '', ['Assigned', 'Accepted', 'In Progress', 'Completed'], true) ? $_POST['status'] : 'In Progress';
 
         if ($duty_id > 0) {
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $duty_id]);
+            mcoll('duties')->updateOne(
+                ['id' => $duty_id],
+                ['$set' => ['status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')]]
+            );
+
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($duty_id, $new_status, (int)$u['id']);
             }
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([$u['id'], 'DUTY STATUS UPDATED', "Set duty #{$duty_id} status to {$new_status}"]);
 
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('duties');
-            }
+            mongo_audit_log(
+                $u['id'],
+                'DUTY STATUS UPDATED',
+                "Set duty #{$duty_id} status to {$new_status}"
+            );
+
             flash('success', "Your duty status updated to: {$new_status}");
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=' . urlencode($active_tab) . (isset($_GET['echelon']) ? '&echelon=' . urlencode($_GET['echelon']) : ''));
@@ -202,15 +207,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $new_status = ($_POST['status'] ?? '') === 'Active' ? 'Active' : 'Inactive';
 
         if ($target_id > 0) {
-            $stmt = $pdo->prepare("UPDATE users SET status = ? WHERE id = ?");
-            $stmt->execute([$new_status, $target_id]);
+            mcoll('users')->updateOne(
+                ['id' => $target_id],
+                ['$set' => ['status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')]]
+            );
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([$u['id'], 'SUBORDINATE ACCOUNT STATUS CHANGE', "Changed status of user #{$target_id} to {$new_status}"]);
+            mongo_audit_log(
+                $u['id'],
+                'SUBORDINATE ACCOUNT STATUS CHANGE',
+                "Changed status of user #{$target_id} to {$new_status}"
+            );
 
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('users');
-            }
             flash('success', "Subordinate account status updated to {$new_status}.");
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=' . urlencode($active_tab) . (isset($_GET['echelon']) ? '&echelon=' . urlencode($_GET['echelon']) : ''));
@@ -227,28 +234,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $event_id = (int)($_POST['event_id'] ?? 0);
 
         if ($event_id === 0) {
-            $active_ev = $pdo->query("SELECT id FROM events WHERE status IN ('Upcoming', 'Ongoing') ORDER BY event_date ASC LIMIT 1")->fetch();
+            $active_ev = mcoll('events')->findOne(
+                ['status' => ['$in' => ['Upcoming', 'Ongoing']]],
+                ['sort' => ['event_date' => 1]]
+            );
             $event_id = $active_ev ? (int)$active_ev['id'] : 1;
         }
 
         if ($title !== '' && $target_user_id > 0) {
-            $stmt = $pdo->prepare("
-                INSERT INTO duties (event_id, title, department, level, location, time_slot, priority, assigned_to, assigned_by, status, created_at)
-                VALUES (?, ?, 'Protocol', ?, ?, ?, ?, ?, ?, 'Assigned', NOW())
-            ");
-            $stmt->execute([$event_id, $title, $sub_level, $location, $time_slot, $priority, $target_user_id, $u['id']]);
-            $dutyId = (int)$pdo->lastInsertId();
+            $dutyId = mongo_next_id('duties');
+            $now = date('Y-m-d H:i:s');
+            mcoll('duties')->insertOne([
+                'id' => $dutyId,
+                'event_id' => $event_id,
+                'title' => $title,
+                'department' => 'Protocol',
+                'level' => $sub_level,
+                'location' => $location,
+                'time_slot' => $time_slot,
+                'priority' => $priority,
+                'assigned_to' => $target_user_id,
+                'assigned_by' => $u['id'],
+                'status' => 'Assigned',
+                'created_at' => $now
+            ]);
 
             if (function_exists('notify_duty_assignment')) {
                 notify_duty_assignment($dutyId, $title, 'Protocol', $sub_level, $target_user_id, (int)$u['id']);
             }
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([$u['id'], 'Military Directive Delegated', "Assigned directive '{$title}' to user #{$target_user_id}"]);
+            mongo_audit_log(
+                $u['id'],
+                'Military Directive Delegated',
+                "Assigned directive '{$title}' to user #{$target_user_id}"
+            );
 
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('duties');
-            }
             flash('success', "Operational directive '{$title}' successfully assigned to subordinate.");
         } else {
             flash('error', 'Directive title is required.');
@@ -279,22 +299,42 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         if ($evidence_text !== '') {
-            $pdo->prepare("
-                INSERT INTO military_evidence_reports (duty_id, soldier_id, section_commander_id, evidence_text, evidence_file, status, created_at)
-                VALUES (?, ?, 17, ?, ?, 'Submitted', NOW())
-            ")->execute([$duty_id, $u['id'], $evidence_text, $evidence_file]);
+            $evidenceReportId = mongo_next_id('military_evidence_reports');
+            $now = date('Y-m-d H:i:s');
+
+            mcoll('military_evidence_reports')->insertOne([
+                'id' => $evidenceReportId,
+                'duty_id' => $duty_id,
+                'soldier_id' => $u['id'],
+                'section_commander_id' => 17,
+                'evidence_text' => $evidence_text,
+                'evidence_file' => $evidence_file,
+                'status' => 'Submitted',
+                'created_at' => $now
+            ]);
 
             if ($duty_id > 0) {
-                $pdo->prepare("UPDATE duties SET status = 'Completed', notes = CONCAT(COALESCE(notes,''), ' [Evidence Submitted]') WHERE id = ?")
-                    ->execute([$duty_id]);
+                $dutyDoc = mcoll('duties')->findOne(['id' => $duty_id]);
+                $oldNotes = $dutyDoc ? (string)($dutyDoc['notes'] ?? '') : '';
+                mcoll('duties')->updateOne(
+                    ['id' => $duty_id],
+                    ['$set' => [
+                        'status' => 'Completed',
+                        'notes' => $oldNotes . ' [Evidence Submitted]',
+                        'updated_at' => $now
+                    ]]
+                );
             }
 
             if (function_exists('add_user_notification')) {
-                add_user_notification(17, 'Soldier Duty Completion Evidence: ' . $u['name'], 'Corporal N. Islam has submitted post completion report for verification.', 'duty_allocated', BASE_URL . '/manage_subordinates.php?tab=soldier_evidence');
+                add_user_notification(17, 'Soldier Duty Completion Evidence: ' . ($u['name'] ?? 'Soldier'), 'Corporal N. Islam has submitted post completion report for verification.', 'duty_allocated', BASE_URL . '/manage_subordinates.php?tab=soldier_evidence');
             }
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([$u['id'], 'Soldier Evidence Submitted', "Soldier uploaded post execution report for duty #{$duty_id}"]);
+            mongo_audit_log(
+                $u['id'],
+                'Soldier Evidence Submitted',
+                "Soldier uploaded post execution report for duty #{$duty_id}"
+            );
 
             flash('success', 'Post completion evidence successfully uploaded and dispatched to Section Commander for sign-off.');
         } else {
@@ -310,12 +350,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $verifier_notes = trim($_POST['verifier_notes'] ?? '');
 
         if ($rep_id > 0) {
-            $pdo->prepare("UPDATE military_evidence_reports SET status = ?, verifier_notes = ?, verified_at = NOW() WHERE id = ?")
-                ->execute([$decision, $verifier_notes, $rep_id]);
+            $now = date('Y-m-d H:i:s');
+            mcoll('military_evidence_reports')->updateOne(
+                ['id' => $rep_id],
+                ['$set' => [
+                    'status' => $decision,
+                    'verifier_notes' => $verifier_notes,
+                    'verified_at' => $now
+                ]]
+            );
 
-            $rep = $pdo->query("SELECT * FROM military_evidence_reports WHERE id = {$rep_id}")->fetch();
-            if ($rep && function_exists('add_user_notification')) {
-                add_user_notification((int)$rep['soldier_id'], 'Duty Evidence ' . $decision, 'Section Commander has reviewed your post evidence: ' . $decision . '. Remarks: ' . $verifier_notes, 'system', BASE_URL . '/manage_subordinates.php');
+            $repDoc = mcoll('military_evidence_reports')->findOne(['id' => $rep_id]);
+            if ($repDoc && function_exists('add_user_notification')) {
+                add_user_notification((int)$repDoc['soldier_id'], 'Duty Evidence ' . $decision, 'Section Commander has reviewed your post evidence: ' . $decision . '. Remarks: ' . $verifier_notes, 'system', BASE_URL . '/manage_subordinates.php');
             }
 
             flash('success', "Soldier duty completion report marked as: {$decision}");
@@ -330,10 +377,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $desc = trim($_POST['description'] ?? '');
 
         if ($title !== '' && $desc !== '') {
-            $pdo->prepare("
-                INSERT INTO military_critical_issues (title, reported_by, reported_level, severity, description, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'Open', NOW())
-            ")->execute([$title, $u['id'], $proto_lvl, $severity, $desc]);
+            $issueId = mongo_next_id('military_critical_issues');
+            $now = date('Y-m-d H:i:s');
+            mcoll('military_critical_issues')->insertOne([
+                'id' => $issueId,
+                'title' => $title,
+                'reported_by' => $u['id'],
+                'reported_level' => $proto_lvl,
+                'severity' => $severity,
+                'description' => $desc,
+                'status' => 'Open',
+                'created_at' => $now
+            ]);
 
             // Notify Higher Command (User 11)
             if (function_exists('add_user_notification')) {
@@ -351,8 +406,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $status = $_POST['status'] ?? 'Resolved';
 
         if ($issue_id > 0) {
-            $pdo->prepare("UPDATE military_critical_issues SET command_decision = ?, status = ?, resolved_by = ?, resolved_at = NOW() WHERE id = ?")
-                ->execute([$decision, $status, $u['id'], $issue_id]);
+            $now = date('Y-m-d H:i:s');
+            mcoll('military_critical_issues')->updateOne(
+                ['id' => $issue_id],
+                ['$set' => [
+                    'command_decision' => $decision,
+                    'status' => $status,
+                    'resolved_by' => $u['id'],
+                    'resolved_at' => $now
+                ]]
+            );
             flash('success', "Command decision promulgated for Incident #{$issue_id}.");
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=critical_issues');
@@ -368,10 +431,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $schedule = !empty($_POST['meeting_schedule']) ? $_POST['meeting_schedule'] : date('Y-m-d H:i:s', strtotime('+1 day'));
 
         if ($title !== '') {
-            $pdo->prepare("
-                INSERT INTO military_inter_coordinations (echelon_level, title, unit_a, unit_b, coordination_type, meeting_schedule, details, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'Scheduled', NOW())
-            ")->execute([$active_echelon, $title, $unit_a, $unit_b, $type, $schedule, $details]);
+            $coordId = mongo_next_id('military_inter_coordinations');
+            $now = date('Y-m-d H:i:s');
+            mcoll('military_inter_coordinations')->insertOne([
+                'id' => $coordId,
+                'echelon_level' => $active_echelon,
+                'title' => $title,
+                'unit_a' => $unit_a,
+                'unit_b' => $unit_b,
+                'coordination_type' => $type,
+                'meeting_schedule' => $schedule,
+                'details' => $details,
+                'status' => 'Scheduled',
+                'created_at' => $now
+            ]);
             flash('success', 'Coordination schedule successfully recorded.');
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=' . urlencode($active_tab));
@@ -385,8 +458,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $notes = trim($_POST['notes'] ?? '');
 
         if ($item_id > 0) {
-            $pdo->prepare("UPDATE military_ceremonial_prep SET readiness_percentage = ?, status = ?, notes = ? WHERE id = ?")
-                ->execute([$readiness, $st, $notes, $item_id]);
+            mcoll('military_ceremonial_prep')->updateOne(
+                ['id' => $item_id],
+                ['$set' => [
+                    'readiness_percentage' => $readiness,
+                    'status' => $st,
+                    'notes' => $notes,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ]]
+            );
             flash('success', 'Ceremonial checkpoint readiness updated.');
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=ceremonial_prep');
@@ -401,10 +481,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $notes = trim($_POST['notes'] ?? '');
 
         if ($name !== '') {
-            $pdo->prepare("
-                INSERT INTO military_resource_allocations (resource_type, item_name, quantity, allocated_to, request_status, notes, created_at)
-                VALUES (?, ?, ?, ?, 'Approved', ?, NOW())
-            ")->execute([$type, $name, $qty, $target, $notes]);
+            $resId = mongo_next_id('military_resource_allocations');
+            $now = date('Y-m-d H:i:s');
+            mcoll('military_resource_allocations')->insertOne([
+                'id' => $resId,
+                'resource_type' => $type,
+                'item_name' => $name,
+                'quantity' => $qty,
+                'allocated_to' => $target,
+                'request_status' => 'Approved',
+                'notes' => $notes,
+                'created_at' => $now
+            ]);
             flash('success', "Resource '{$name}' allocated to {$target}.");
         }
         redirect(BASE_URL . '/manage_subordinates.php?tab=resource_allocation');
@@ -412,89 +500,210 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 // =========================================================================
-// DATA FETCHING: MY DUTIES, SUBORDINATE DUTIES, AND ECHELON MODULE DATA
+// DATA FETCHING: MY DUTIES, SUBORDINATE DUTIES, AND ECHELON MODULE DATA (MongoDB Atlas)
 // =========================================================================
 
 // 1. My Assigned Duties (Duties for current user or current echelon)
-$my_duties = $pdo->prepare("
-    SELECT d.*, e.name AS event_name, u_by.name AS assigner_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u_by ON u_by.id = d.assigned_by
-    WHERE d.assigned_to = ? OR (d.department = 'Protocol' AND d.level = ?)
-    ORDER BY d.id DESC
-    LIMIT 6
-");
 $my_level_code = 'L' . ($cfg['level_num'] ?? 1);
-$my_duties->execute([$u['id'], $my_level_code]);
-$my_duties = $my_duties->fetchAll();
+$myDutiesPipeline = [
+    ['$match' => [
+        '$or' => [
+            ['assigned_to' => (int)$u['id']],
+            ['$and' => [
+                ['department' => 'Protocol'],
+                ['level' => $my_level_code]
+            ]]
+        ]
+    ]],
+    ['$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'assigned_by',
+        'foreignField' => 'id',
+        'as' => 'assigner_docs'
+    ]],
+    ['$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'assigner_name' => ['$ifNull' => [['$arrayElemAt' => ['$assigner_docs.name', 0]], '']]
+    ]],
+    ['$project' => ['event_docs' => 0, 'assigner_docs' => 0]],
+    ['$sort' => ['id' => -1]],
+    ['$limit' => 6]
+];
+$myDutiesCursor = mcoll('duties')->aggregate($myDutiesPipeline);
+$my_duties = [];
+foreach ($myDutiesCursor as $mdDoc) {
+    $my_duties[] = mongo_doc_to_array($mdDoc);
+}
 
 // 2. Subordinate Accounts & Unit
 $sub_users = [];
 $sub_unit = null;
 if ($active_echelon === 'Individual Soldier') {
-    $sub_users = $pdo->query("SELECT * FROM users WHERE id = {$u['id']}")->fetchAll();
-    $sub_unit = $pdo->query("SELECT * FROM military_protocol_units WHERE level = 'Individual Soldier' LIMIT 1")->fetch();
+    $subUsersCursor = mcoll('users')->find(['id' => (int)$u['id']]);
+    foreach ($subUsersCursor as $suDoc) {
+        $sub_users[] = mongo_doc_to_array($suDoc);
+    }
+    $suDoc = mcoll('military_protocol_units')->findOne(['level' => 'Individual Soldier']);
+    if ($suDoc) {
+        $sub_unit = mongo_doc_to_array($suDoc);
+    }
 } else {
     $target_level = $cfg['sub_level'];
-    $sub_users_stmt = $pdo->prepare("
-        SELECT u.*, mpu.code as unit_code, mpu.name as unit_name, mpu.hq_location
-        FROM users u
-        LEFT JOIN military_protocol_units mpu ON mpu.commander_id = u.id
-        WHERE u.protocol_level = ? OR u.department LIKE ?
-        ORDER BY u.id ASC
-    ");
-    $sub_users_stmt->execute([$target_level, '%' . $target_level . '%']);
-    $sub_users = $sub_users_stmt->fetchAll();
+    $subPipeline = [
+        ['$match' => [
+            '$or' => [
+                ['protocol_level' => $target_level],
+                ['department' => new MongoDB\BSON\Regex($target_level, 'i')]
+            ]
+        ]],
+        ['$lookup' => [
+            'from' => 'military_protocol_units',
+            'localField' => 'id',
+            'foreignField' => 'commander_id',
+            'as' => 'mpu_docs'
+        ]],
+        ['$addFields' => [
+            'unit_code' => ['$ifNull' => [['$arrayElemAt' => ['$mpu_docs.code', 0]], null]],
+            'unit_name' => ['$ifNull' => [['$arrayElemAt' => ['$mpu_docs.name', 0]], null]],
+            'hq_location' => ['$ifNull' => [['$arrayElemAt' => ['$mpu_docs.hq_location', 0]], null]]
+        ]],
+        ['$project' => ['mpu_docs' => 0]],
+        ['$sort' => ['id' => 1]]
+    ];
+    $subCursor = mcoll('users')->aggregate($subPipeline);
+    foreach ($subCursor as $scDoc) {
+        $sub_users[] = mongo_doc_to_array($scDoc);
+    }
 
-    $sub_unit = $pdo->prepare("SELECT * FROM military_protocol_units WHERE level = ? LIMIT 1");
-    $sub_unit->execute([$target_level]);
-    $sub_unit = $sub_unit->fetch();
+    $suDoc = mcoll('military_protocol_units')->findOne(['level' => $target_level]);
+    if ($suDoc) {
+        $sub_unit = mongo_doc_to_array($suDoc);
+    }
 }
 
 // 3. Subordinate Echelon Allocated Duties (Duties assigned to subordinate level)
 $user_ids = !empty($sub_users) ? array_column($sub_users, 'id') : [$cfg['sub_user_id']];
-$in_clause = implode(',', array_map('intval', $user_ids));
+$intUserIds = array_map('intval', $user_ids);
 
-$subordinate_duties = $pdo->query("
-    SELECT d.*, e.name AS event_name, u.name AS assignee_name, u.designation AS assignee_designation
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u ON u.id = d.assigned_to
-    WHERE (d.assigned_to IN ({$in_clause}) OR (d.department = 'Protocol' AND d.level = '{$cfg['sub_code']}'))
-    ORDER BY d.id DESC
-    LIMIT 12
-")->fetchAll();
+$subDutiesPipeline = [
+    ['$match' => [
+        '$or' => [
+            ['assigned_to' => ['$in' => $intUserIds]],
+            ['$and' => [
+                ['department' => 'Protocol'],
+                ['level' => $cfg['sub_code']]
+            ]]
+        ]
+    ]],
+    ['$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'assigned_to',
+        'foreignField' => 'id',
+        'as' => 'assignee_docs'
+    ]],
+    ['$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'assignee_name' => ['$ifNull' => [['$arrayElemAt' => ['$assignee_docs.name', 0]], '']],
+        'assignee_designation' => ['$ifNull' => [['$arrayElemAt' => ['$assignee_docs.designation', 0]], '']]
+    ]],
+    ['$project' => ['event_docs' => 0, 'assignee_docs' => 0]],
+    ['$sort' => ['id' => -1]],
+    ['$limit' => 12]
+];
+$subDutiesCursor = mcoll('duties')->aggregate($subDutiesPipeline);
+$subordinate_duties = [];
+foreach ($subDutiesCursor as $sbdDoc) {
+    $subordinate_duties[] = mongo_doc_to_array($sbdDoc);
+}
 
 // 4. Module-specific data fetching
-$critical_issues = $pdo->query("
-    SELECT i.*, u.name AS reporter_name, u.designation AS reporter_designation
-    FROM military_critical_issues i
-    LEFT JOIN users u ON u.id = i.reported_by
-    ORDER BY i.id DESC
-")->fetchAll();
+$issuesPipeline = [
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'reported_by',
+        'foreignField' => 'id',
+        'as' => 'reporter_docs'
+    ]],
+    ['$addFields' => [
+        'reporter_name' => ['$ifNull' => [['$arrayElemAt' => ['$reporter_docs.name', 0]], '']],
+        'reporter_designation' => ['$ifNull' => [['$arrayElemAt' => ['$reporter_docs.designation', 0]], '']]
+    ]],
+    ['$project' => ['reporter_docs' => 0]],
+    ['$sort' => ['id' => -1]]
+];
+$issuesCursor = mcoll('military_critical_issues')->aggregate($issuesPipeline);
+$critical_issues = [];
+foreach ($issuesCursor as $isDoc) {
+    $critical_issues[] = mongo_doc_to_array($isDoc);
+}
 
-$inter_coordinations = $pdo->query("
-    SELECT * FROM military_inter_coordinations ORDER BY id DESC
-")->fetchAll();
+$interCoordsCursor = mcoll('military_inter_coordinations')->find([], ['sort' => ['id' => -1]]);
+$inter_coordinations = [];
+foreach ($interCoordsCursor as $icDoc) {
+    $inter_coordinations[] = mongo_doc_to_array($icDoc);
+}
 
-$ceremonial_prep = $pdo->query("
-    SELECT * FROM military_ceremonial_prep ORDER BY id ASC
-")->fetchAll();
+$prepCursor = mcoll('military_ceremonial_prep')->find([], ['sort' => ['id' => 1]]);
+$ceremonial_prep = [];
+foreach ($prepCursor as $prDoc) {
+    $ceremonial_prep[] = mongo_doc_to_array($prDoc);
+}
 
-$resource_allocations = $pdo->query("
-    SELECT * FROM military_resource_allocations ORDER BY id DESC
-")->fetchAll();
+$resAllocCursor = mcoll('military_resource_allocations')->find([], ['sort' => ['id' => -1]]);
+$resource_allocations = [];
+foreach ($resAllocCursor as $raDoc) {
+    $resource_allocations[] = mongo_doc_to_array($raDoc);
+}
 
-$soldier_evidence_list = $pdo->query("
-    SELECT r.*, d.title AS duty_title, d.location AS post_location, u.name AS soldier_name, u.designation AS soldier_designation
-    FROM military_evidence_reports r
-    LEFT JOIN duties d ON d.id = r.duty_id
-    LEFT JOIN users u ON u.id = r.soldier_id
-    ORDER BY r.id DESC
-")->fetchAll();
+$evidencePipeline = [
+    ['$lookup' => [
+        'from' => 'duties',
+        'localField' => 'duty_id',
+        'foreignField' => 'id',
+        'as' => 'duty_docs'
+    ]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'soldier_id',
+        'foreignField' => 'id',
+        'as' => 'soldier_docs'
+    ]],
+    ['$addFields' => [
+        'duty_title' => ['$ifNull' => [['$arrayElemAt' => ['$duty_docs.title', 0]], '']],
+        'post_location' => ['$ifNull' => [['$arrayElemAt' => ['$duty_docs.location', 0]], '']],
+        'soldier_name' => ['$ifNull' => [['$arrayElemAt' => ['$soldier_docs.name', 0]], '']],
+        'soldier_designation' => ['$ifNull' => [['$arrayElemAt' => ['$soldier_docs.designation', 0]], '']]
+    ]],
+    ['$project' => ['duty_docs' => 0, 'soldier_docs' => 0]],
+    ['$sort' => ['id' => -1]]
+];
+$evidenceCursor = mcoll('military_evidence_reports')->aggregate($evidencePipeline);
+$soldier_evidence_list = [];
+foreach ($evidenceCursor as $evDoc) {
+    $soldier_evidence_list[] = mongo_doc_to_array($evDoc);
+}
 
-$events = $pdo->query("SELECT id, name FROM events WHERE status IN ('Upcoming', 'Ongoing') ORDER BY event_date ASC")->fetchAll();
+$eventsCursor = mcoll('events')->find(
+    ['status' => ['$in' => ['Upcoming', 'Ongoing']]],
+    ['sort' => ['event_date' => 1]]
+);
+$events = [];
+foreach ($eventsCursor as $evDoc) {
+    $events[] = mongo_doc_to_array($evDoc);
+}
+
 
 require __DIR__ . '/includes/header.php';
 ?>

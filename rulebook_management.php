@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 $u = current_user();
@@ -11,7 +12,6 @@ if (!$is_military && !has_role('Admin') && !is_event_director()) {
     redirect(BASE_URL . '/index.php');
 }
 
-$pdo = db();
 $page_title = 'Military SOP & Rulebook Management | BUP Protocol';
 
 // Standardized Protocol Categories
@@ -27,7 +27,7 @@ $categories = [
     'REP' => 'Incident Reporting & Escalation'
 ];
 
-// Handle Actions
+// Handle Actions (MongoDB Atlas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -35,11 +35,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'acknowledge') {
         $sop_id = (int)($_POST['sop_id'] ?? 0);
         if ($sop_id > 0) {
-            try {
-                $ackStmt = $pdo->prepare("INSERT INTO military_sop_acknowledgements (sop_id, user_id) VALUES (?, ?)");
-                $ackStmt->execute([$sop_id, $u['id']]);
+            $exists = mcoll('military_sop_acknowledgements')->findOne([
+                'sop_id' => $sop_id,
+                'user_id' => (int)$u['id']
+            ]);
+
+            if (!$exists) {
+                $ackId = mongo_next_id('military_sop_acknowledgements');
+                mcoll('military_sop_acknowledgements')->insertOne([
+                    'id' => $ackId,
+                    'sop_id' => $sop_id,
+                    'user_id' => (int)$u['id'],
+                    'created_at' => date('Y-m-d H:i:s')
+                ]);
                 flash('success', 'Standing Operating Procedure acknowledged and signed into official record.');
-            } catch (Exception $e) {
+            } else {
                 flash('info', 'You have already acknowledged this Standing Operating Procedure.');
             }
         }
@@ -81,59 +91,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = in_array($_POST['status'] ?? '', ['Draft', 'Pending Approval', 'Approved', 'Active', 'Archived'], true) ? $_POST['status'] : 'Active';
 
         if ($title !== '' && $content !== '') {
+            $now = date('Y-m-d H:i:s');
             if ($action === 'create') {
                 if ($code === '') {
                     $catCode = substr($category, 0, 3);
-                    $cCnt = $pdo->query("SELECT COUNT(*) FROM military_sops WHERE code LIKE 'SOP-{$catCode}-%'")->fetchColumn();
+                    $cCnt = mcoll('military_sops')->countDocuments([
+                        'code' => ['$regex' => '^SOP-' . preg_quote($catCode, '/') . '-']
+                    ]);
                     $code = sprintf("SOP-%s-%03d", $catCode, (int)$cCnt + 1);
                 }
 
-                $stmt = $pdo->prepare("
-                    INSERT INTO military_sops (
-                        code, title, category, version, applicable_level, content, authorized_by, status,
-                        issuing_authority, approval_authority, effective_date, promulgation_date,
-                        purpose_scope, roles_responsibilities, supersedes_id, related_documents,
-                        implementation_guidelines, compliance_requirements, supporting_document,
-                        review_date, acknowledgement_required, classification, distribution_scope
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([
-                    $code, $title, $cat_label, $version, $applicable_level, $content, $authorized_by, $status,
-                    $issuing_authority, $approval_authority, $effective_date, $promulgation_date,
-                    $purpose_scope, $roles_responsibilities, $supersedes_id, $related_documents,
-                    $implementation_guidelines, $compliance_requirements, $supporting_document,
-                    $review_date, $acknowledgement_required, $classification, $distribution_scope
+                $newSopId = mongo_next_id('military_sops');
+                mcoll('military_sops')->insertOne([
+                    'id' => $newSopId,
+                    'code' => $code,
+                    'title' => $title,
+                    'category' => $cat_label,
+                    'version' => $version,
+                    'applicable_level' => $applicable_level,
+                    'content' => $content,
+                    'authorized_by' => $authorized_by,
+                    'status' => $status,
+                    'issuing_authority' => $issuing_authority,
+                    'approval_authority' => $approval_authority,
+                    'effective_date' => $effective_date,
+                    'promulgation_date' => $promulgation_date,
+                    'purpose_scope' => $purpose_scope,
+                    'roles_responsibilities' => $roles_responsibilities,
+                    'supersedes_id' => $supersedes_id,
+                    'related_documents' => $related_documents,
+                    'implementation_guidelines' => $implementation_guidelines,
+                    'compliance_requirements' => $compliance_requirements,
+                    'supporting_document' => $supporting_document,
+                    'review_date' => $review_date,
+                    'acknowledgement_required' => $acknowledgement_required,
+                    'classification' => $classification,
+                    'distribution_scope' => $distribution_scope,
+                    'created_at' => $now,
+                    'updated_at' => $now
                 ]);
 
-                $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                    ->execute([$u['id'], 'SOP PROMULGATED', "Higher Command issued new SOP: {$code} - {$title} ({$classification})"]);
+                mongo_audit_log(
+                    $u['id'],
+                    'SOP PROMULGATED',
+                    "Higher Command issued new SOP: {$code} - {$title} ({$classification})"
+                );
+
                 flash('success', "Military SOP {$code} ({$title}) successfully promulgated.");
             } else {
-                $stmt = $pdo->prepare("
-                    UPDATE military_sops SET
-                        title = ?, category = ?, version = ?, applicable_level = ?, content = ?, authorized_by = ?, status = ?,
-                        issuing_authority = ?, approval_authority = ?, effective_date = ?, promulgation_date = ?,
-                        purpose_scope = ?, roles_responsibilities = ?, supersedes_id = ?, related_documents = ?,
-                        implementation_guidelines = ?, compliance_requirements = ?, supporting_document = ?,
-                        review_date = ?, acknowledgement_required = ?, classification = ?, distribution_scope = ?
-                    WHERE id = ?
-                ");
-                $stmt->execute([
-                    $title, $cat_label, $version, $applicable_level, $content, $authorized_by, $status,
-                    $issuing_authority, $approval_authority, $effective_date, $promulgation_date,
-                    $purpose_scope, $roles_responsibilities, $supersedes_id, $related_documents,
-                    $implementation_guidelines, $compliance_requirements, $supporting_document,
-                    $review_date, $acknowledgement_required, $classification, $distribution_scope,
-                    $id
-                ]);
+                mcoll('military_sops')->updateOne(
+                    ['id' => $id],
+                    ['$set' => [
+                        'title' => $title,
+                        'category' => $cat_label,
+                        'version' => $version,
+                        'applicable_level' => $applicable_level,
+                        'content' => $content,
+                        'authorized_by' => $authorized_by,
+                        'status' => $status,
+                        'issuing_authority' => $issuing_authority,
+                        'approval_authority' => $approval_authority,
+                        'effective_date' => $effective_date,
+                        'promulgation_date' => $promulgation_date,
+                        'purpose_scope' => $purpose_scope,
+                        'roles_responsibilities' => $roles_responsibilities,
+                        'supersedes_id' => $supersedes_id,
+                        'related_documents' => $related_documents,
+                        'implementation_guidelines' => $implementation_guidelines,
+                        'compliance_requirements' => $compliance_requirements,
+                        'supporting_document' => $supporting_document,
+                        'review_date' => $review_date,
+                        'acknowledgement_required' => $acknowledgement_required,
+                        'classification' => $classification,
+                        'distribution_scope' => $distribution_scope,
+                        'updated_at' => $now
+                    ]]
+                );
 
-                $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                    ->execute([$u['id'], 'SOP UPDATED', "Updated SOP #{$id} ({$title}) to version {$version}"]);
+                mongo_audit_log(
+                    $u['id'],
+                    'SOP UPDATED',
+                    "Updated SOP #{$id} ({$title}) to version {$version}"
+                );
+
                 flash('success', "Rulebook #{$id} updated successfully.");
-            }
-
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('military_sops');
             }
         } else {
             flash('error', 'Title and procedural standing orders content are mandatory.');
@@ -142,23 +183,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch all military SOPs with acknowledgement counts
-$sops = $pdo->query("
-    SELECT s.*,
-           (SELECT COUNT(*) FROM military_sop_acknowledgements a WHERE a.sop_id = s.id) AS ack_count,
-           (SELECT COUNT(*) FROM military_sop_acknowledgements a WHERE a.sop_id = s.id AND a.user_id = {$u['id']}) AS user_has_acked
-    FROM military_sops s
-    ORDER BY s.id ASC
-")->fetchAll();
+// Fetch all military SOPs with acknowledgement counts (MongoDB Atlas)
+$sopsCursor = mcoll('military_sops')->find([], ['sort' => ['id' => 1]]);
+$sops = [];
+$currentUserId = (int)$u['id'];
+
+foreach ($sopsCursor as $sDoc) {
+    $sop = mongo_doc_to_array($sDoc);
+    $sopId = (int)$sop['id'];
+    $sop['ack_count'] = mcoll('military_sop_acknowledgements')->countDocuments(['sop_id' => $sopId]);
+    $sop['user_has_acked'] = mcoll('military_sop_acknowledgements')->countDocuments([
+        'sop_id' => $sopId,
+        'user_id' => $currentUserId
+    ]);
+    $sops[] = $sop;
+}
 
 // Edit target if requested
 $edit_sop = null;
 if (isset($_GET['edit']) && $is_higher_cmd) {
     $edit_id = (int)$_GET['edit'];
-    $stmtEdit = $pdo->prepare("SELECT * FROM military_sops WHERE id = ?");
-    $stmtEdit->execute([$edit_id]);
-    $edit_sop = $stmtEdit->fetch();
+    $editDoc = mcoll('military_sops')->findOne(['id' => $edit_id]);
+    if ($editDoc) {
+        $edit_sop = mongo_doc_to_array($editDoc);
+    }
 }
+
 
 require __DIR__ . '/includes/header.php';
 ?>

@@ -1,15 +1,16 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 // Guard: Staff members (or leads/supervisors/admins inspecting the view)
-$pdo = db();
 $user = current_user();
 $userId = (int)$user['id'];
+$userDept = $user['department'] ?? 'Protocol';
 
 $page_title = 'Staff Dashboard | BUP Protocol';
 
-// Handle duty status updates by staff
+// Handle duty status updates by staff (MongoDB Atlas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -26,23 +27,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Verify duty belongs to this staff member
-        $chk = $pdo->prepare("SELECT id, title, status FROM duties WHERE id = ? AND (assigned_to = ? OR department = ?)");
-        $chk->execute([$duty_id, $userId, $user['department']]);
-        $duty = $chk->fetch();
+        $dutyDoc = mcoll('duties')->findOne([
+            'id' => $duty_id,
+            '$or' => [
+                ['assigned_to' => $userId],
+                ['department' => $userDept]
+            ]
+        ]);
 
-        if ($duty) {
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $duty_id]);
+        if ($dutyDoc) {
+            $duty = mongo_doc_to_array($dutyDoc);
+            mcoll('duties')->updateOne(['id' => $duty_id], ['$set' => ['status' => $new_status]]);
+
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($duty_id, $new_status, $userId);
             }
-            
-            // Audit log
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Duty Status Updated', ?)")
-                ->execute([$userId, 'Staff ' . $user['name'] . ' updated duty "' . $duty['title'] . '" status to ' . $new_status]);
 
-            flash('success', 'Status for duty <strong>' . e($duty['title']) . '</strong> updated to <strong>' . e($new_status) . '</strong>.');
-            mongo_sync_table('duties');
-            mongo_sync_table('audit_logs');
+            // Audit log
+            mongo_audit_log(
+                $userId,
+                'Duty Status Updated',
+                'Staff ' . $user['name'] . ' updated duty "' . ($duty['title'] ?? '') . '" status to ' . $new_status
+            );
+
+            flash('success', 'Status for duty <strong>' . e($duty['title'] ?? '') . '</strong> updated to <strong>' . e($new_status) . '</strong>.');
         } else {
             flash('error', 'You are not assigned to this duty.');
         }
@@ -50,25 +58,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch staff assigned duties
-$dutiesStmt = $pdo->prepare("
-    SELECT d.*, e.name as event_title, e.venue as event_venue,
-           u_sup.name as supervisor_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u_sup ON u_sup.id = d.supervisor_id
-    WHERE (d.assigned_to = ? OR (d.level = 'L5' AND (d.department = ? OR d.assigned_to = 0)))
-    ORDER BY 
-        CASE 
-            WHEN d.status IN ('Assigned', 'Pending') THEN 1
-            WHEN d.status = 'In Progress' THEN 2
-            WHEN d.status = 'Accepted' THEN 3
-            ELSE 4
-        END,
-        d.id DESC
-");
-$dutiesStmt->execute([$userId, $user['department'] ?? 'Protocol']);
-$assignedDuties = $dutiesStmt->fetchAll();
+// Fetch staff assigned duties (MongoDB Atlas Aggregation Pipeline)
+$dutiesPipeline = [
+    [
+        '$match' => [
+            '$or' => [
+                ['assigned_to' => $userId],
+                [
+                    'level' => 'L5',
+                    '$or' => [
+                        ['department' => $userDept],
+                        ['assigned_to' => 0]
+                    ]
+                ]
+            ]
+        ]
+    ],
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    [
+        '$unwind' => [
+            'path' => '$event',
+            'preserveNullAndEmptyArrays' => true
+        ]
+    ],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'supervisor_id',
+            'foreignField' => 'id',
+            'as' => 'supervisor'
+        ]
+    ],
+    [
+        '$unwind' => [
+            'path' => '$supervisor',
+            'preserveNullAndEmptyArrays' => true
+        ]
+    ]
+];
+
+$cursor = mcoll('duties')->aggregate($dutiesPipeline);
+$assignedDuties = [];
+foreach ($cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_title'] = $row['event']['name'] ?? null;
+    $row['event_venue'] = $row['event']['venue'] ?? null;
+    $row['supervisor_name'] = $row['supervisor']['name'] ?? null;
+    unset($row['event'], $row['supervisor']);
+    $assignedDuties[] = $row;
+}
+
+// Sort duties matching SQL CASE ordering
+usort($assignedDuties, function($a, $b) {
+    $getPriority = function($st) {
+        if (in_array($st, ['Assigned', 'Pending'], true)) return 1;
+        if ($st === 'In Progress') return 2;
+        if ($st === 'Accepted') return 3;
+        return 4;
+    };
+    $pA = $getPriority($a['status'] ?? '');
+    $pB = $getPriority($b['status'] ?? '');
+    if ($pA !== $pB) return $pA <=> $pB;
+    return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);
+});
 
 // Statistics
 $totalAssigned = count($assignedDuties);
@@ -81,23 +140,44 @@ foreach ($assignedDuties as $d) {
     elseif ($d['status'] === 'Completed') $completedDuties++;
 }
 
-// Upcoming events
-$upcomingEvents = $pdo->query("
-    SELECT id, name as title, event_type, venue, event_date, event_time, status
-    FROM events
-    WHERE status IN ('Upcoming', 'Ongoing')
-    ORDER BY event_date ASC, event_time ASC
-    LIMIT 5
-")->fetchAll();
+// Upcoming events (MongoDB Atlas)
+$eventDocs = mcoll('events')->find(
+    ['status' => ['$in' => ['Upcoming', 'Ongoing']]],
+    [
+        'sort' => ['event_date' => 1, 'event_time' => 1],
+        'limit' => 5
+    ]
+);
+$upcomingEvents = [];
+foreach ($eventDocs as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['title'] = $row['name'] ?? '';
+    $upcomingEvents[] = $row;
+}
 
-// Announcements
-$announcements = $pdo->query("
-    SELECT a.*, u.name as publisher_name, u.role as publisher_role
-    FROM announcements a
-    LEFT JOIN users u ON u.id = a.created_by
-    ORDER BY a.created_at DESC
-    LIMIT 5
-")->fetchAll();
+// Announcements (MongoDB Atlas)
+$annPipeline = [
+    ['$sort' => ['created_at' => -1]],
+    ['$limit' => 5],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'created_by',
+            'foreignField' => 'id',
+            'as' => 'pub_user'
+        ]
+    ],
+    ['$unwind' => ['path' => '$pub_user', 'preserveNullAndEmptyArrays' => true]]
+];
+$cursor = mcoll('announcements')->aggregate($annPipeline);
+$announcements = [];
+foreach ($cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['publisher_name'] = $row['pub_user']['name'] ?? null;
+    $row['publisher_role'] = $row['pub_user']['role'] ?? null;
+    unset($row['pub_user']);
+    $announcements[] = $row;
+}
 
 require __DIR__ . '/includes/header.php';
 ?>

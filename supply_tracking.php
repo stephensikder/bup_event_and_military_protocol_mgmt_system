@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 // Access control: Logistics Lead, Coordinator, Director, Admin
@@ -8,10 +9,9 @@ if (!is_logistics_lead() && !is_event_coordinator() && !is_event_director() && !
     redirect(BASE_URL . '/dashboard.php');
 }
 
-$pdo = db();
 $page_title = 'Supply & Inventory Tracking | BUP Protocol';
 
-// Handle POST actions
+// Handle POST actions (MongoDB Atlas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -47,19 +47,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stock_status = 'Low Stock';
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO supplies 
-            (item_name, category, qty_required, qty_available, qty_issued, unit, supplier, location, responsible_person, req_date, delivery_date, delivery_status, stock_status, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $item_name, $category, $qty_required, $qty_available, $qty_issued, $unit,
-            $supplier, $location, $responsible_person, $req_date, $delivery_date,
-            $delivery_status, $stock_status, $notes
+        $newId = mongo_next_id('supplies');
+        mcoll('supplies')->insertOne([
+            'id' => $newId,
+            'item_name' => $item_name,
+            'category' => $category,
+            'qty_required' => $qty_required,
+            'qty_available' => $qty_available,
+            'qty_issued' => $qty_issued,
+            'unit' => $unit,
+            'supplier' => $supplier,
+            'location' => $location,
+            'responsible_person' => $responsible_person,
+            'req_date' => $req_date,
+            'delivery_date' => $delivery_date,
+            'delivery_status' => $delivery_status,
+            'stock_status' => $stock_status,
+            'notes' => $notes,
+            'created_at' => date('Y-m-d H:i:s')
         ]);
 
-        $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Supply Added', ?)")
-            ->execute([current_user()['id'], 'Added supply item "' . $item_name . '" (Qty: ' . $qty_available . ' ' . $unit . ')']);
+        mongo_audit_log('Supply Added', 'Added supply item "' . $item_name . '" (Qty: ' . $qty_available . ' ' . $unit . ')');
 
         flash('success', 'Supply item <strong>' . e($item_name) . '</strong> added successfully.');
         redirect(BASE_URL . '/supply_tracking.php');
@@ -71,32 +79,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $issue_qty = max(1, (int)($_POST['issue_qty'] ?? 1));
         $recipient = trim($_POST['recipient'] ?? 'Ground Staff');
 
-        $stmt = $pdo->prepare("SELECT * FROM supplies WHERE id = ? LIMIT 1");
-        $stmt->execute([$id]);
-        $item = $stmt->fetch();
+        $itemDoc = mcoll('supplies')->findOne(['id' => $id]);
 
-        if ($item) {
-            $currentAvailable = (int)$item['qty_available'];
-            $currentIssued = (int)$item['qty_issued'];
+        if ($itemDoc) {
+            $item = mongo_doc_to_array($itemDoc);
+            $currentAvailable = (int)($item['qty_available'] ?? 0);
+            $currentIssued = (int)($item['qty_issued'] ?? 0);
             $remaining = $currentAvailable - $currentIssued;
 
             if ($issue_qty > $remaining) {
-                flash('error', 'Cannot issue ' . $issue_qty . ' units. Only ' . $remaining . ' ' . $item['unit'] . ' remaining.');
+                flash('error', 'Cannot issue ' . $issue_qty . ' units. Only ' . $remaining . ' ' . ($item['unit'] ?? 'units') . ' remaining.');
             } else {
                 $newIssued = $currentIssued + $issue_qty;
                 $newRemaining = $currentAvailable - $newIssued;
-                $newStockStatus = $newRemaining <= 0 ? 'Out of Stock' : ($newRemaining < ($item['qty_required'] * 0.3) ? 'Low Stock' : 'Adequate');
+                $newStockStatus = $newRemaining <= 0 ? 'Out of Stock' : ($newRemaining < (($item['qty_required'] ?? 1) * 0.3) ? 'Low Stock' : 'Adequate');
+                $oldNotes = (string)($item['notes'] ?? '');
+                $newNotes = $oldNotes . "\n[Issued: " . $issue_qty . " " . ($item['unit'] ?? '') . " to " . $recipient . " on " . date('Y-m-d H:i:s') . "]";
 
-                $pdo->prepare("
-                    UPDATE supplies 
-                    SET qty_issued = ?, stock_status = ?, notes = CONCAT(IFNULL(notes,''), '\n[Issued: ', ?, ' ', unit, ' to ', ?, ' on ', NOW(), ']')
-                    WHERE id = ?
-                ")->execute([$newIssued, $newStockStatus, $issue_qty, $recipient, $id]);
+                mcoll('supplies')->updateOne(
+                    ['id' => $id],
+                    ['$set' => [
+                        'qty_issued' => $newIssued,
+                        'stock_status' => $newStockStatus,
+                        'notes' => $newNotes,
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ]]
+                );
 
-                $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Stock Issued', ?)")
-                    ->execute([current_user()['id'], 'Issued ' . $issue_qty . ' ' . $item['unit'] . ' of "' . $item['item_name'] . '" to ' . $recipient]);
+                mongo_audit_log('Stock Issued', 'Issued ' . $issue_qty . ' ' . ($item['unit'] ?? '') . ' of "' . ($item['item_name'] ?? '') . '" to ' . $recipient);
 
-                flash('success', 'Successfully issued ' . $issue_qty . ' ' . e($item['unit']) . ' to ' . e($recipient) . '.');
+                flash('success', 'Successfully issued ' . $issue_qty . ' ' . e($item['unit'] ?? '') . ' to ' . e($recipient) . '.');
             }
         }
         redirect(BASE_URL . '/supply_tracking.php');
@@ -109,19 +121,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stock_status = $_POST['stock_status'] ?? 'Adequate';
         $add_qty = max(0, (int)($_POST['add_qty'] ?? 0));
 
+        $update = [
+            'delivery_status' => $delivery_status,
+            'stock_status' => $stock_status,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        $mongoUpdate = ['$set' => $update];
         if ($add_qty > 0) {
-            $pdo->prepare("
-                UPDATE supplies 
-                SET qty_available = qty_available + ?, delivery_status = ?, stock_status = ?
-                WHERE id = ?
-            ")->execute([$add_qty, $delivery_status, $stock_status, $id]);
-        } else {
-            $pdo->prepare("
-                UPDATE supplies 
-                SET delivery_status = ?, stock_status = ?
-                WHERE id = ?
-            ")->execute([$delivery_status, $stock_status, $id]);
+            $mongoUpdate['$inc'] = ['qty_available' => $add_qty];
         }
+
+        mcoll('supplies')->updateOne(['id' => $id], $mongoUpdate);
 
         flash('success', 'Supply record updated successfully.');
         redirect(BASE_URL . '/supply_tracking.php');
@@ -133,34 +143,51 @@ $q = trim($_GET['q'] ?? '');
 $categoryFilter = trim($_GET['category'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
 
-$sql = "SELECT * FROM supplies WHERE 1=1";
-$params = [];
+$filter = [];
 
 if ($q !== '') {
-    $sql .= " AND (item_name LIKE ? OR supplier LIKE ? OR responsible_person LIKE ? OR location LIKE ?)";
-    $like = '%' . $q . '%';
-    $params = array_merge($params, [$like, $like, $like, $like]);
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $filter['$or'] = [
+        ['item_name' => $regex],
+        ['supplier' => $regex],
+        ['responsible_person' => $regex],
+        ['location' => $regex]
+    ];
 }
 if ($categoryFilter !== '') {
-    $sql .= " AND category = ?";
-    $params[] = $categoryFilter;
+    $filter['category'] = $categoryFilter;
 }
 if ($statusFilter !== '') {
-    $sql .= " AND (stock_status = ? OR delivery_status = ?)";
-    $params[] = $statusFilter;
-    $params[] = $statusFilter;
+    $filter['$or'] = [
+        ['stock_status' => $statusFilter],
+        ['delivery_status' => $statusFilter]
+    ];
 }
 
-$sql .= " ORDER BY id DESC";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$supplies = $stmt->fetchAll();
+$cursor = mcoll('supplies')->find($filter, ['sort' => ['id' => -1]]);
+$supplies = [];
+foreach ($cursor as $doc) {
+    $supplies[] = mongo_doc_to_array($doc);
+}
 
 // Statistics
-$totalItems = (int)$pdo->query("SELECT COUNT(*) FROM supplies")->fetchColumn();
-$lowStockCount = (int)$pdo->query("SELECT COUNT(*) FROM supplies WHERE stock_status IN ('Low Stock', 'Critical', 'Out of Stock')")->fetchColumn();
-$deliveredCount = (int)$pdo->query("SELECT COUNT(*) FROM supplies WHERE delivery_status = 'Delivered'")->fetchColumn();
-$categories = $pdo->query("SELECT DISTINCT category FROM supplies ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+$totalItems = mcoll('supplies')->countDocuments([]);
+$lowStockCount = mcoll('supplies')->countDocuments([
+    'stock_status' => ['$in' => ['Low Stock', 'Critical', 'Out of Stock']]
+]);
+$deliveredCount = mcoll('supplies')->countDocuments([
+    'delivery_status' => 'Delivered'
+]);
+
+$rawCategories = mcoll('supplies')->distinct('category');
+$categories = [];
+foreach ($rawCategories as $rc) {
+    if ($rc !== null && $rc !== '') {
+        $categories[] = (string)$rc;
+    }
+}
+sort($categories);
+
 
 require __DIR__ . '/includes/header.php';
 ?>

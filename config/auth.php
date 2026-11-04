@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/mongo.php';
 
 
 /*
@@ -63,35 +63,18 @@ function login_user(
     string $password
 ): bool {
 
-    $pdo = db();
-
-
     /*
     |--------------------------------------------------------------------------
-    | FIND USER
+    | FIND USER (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM users
-        WHERE email = ?
-        LIMIT 1
-    ");
-
-    $stmt->execute([
-        $email
-    ]);
-
-    $user = $stmt->fetch();
-
+    $user = mongo_doc_to_array(mcoll('users')->findOne(['email' => $email]));
 
     /*
     |--------------------------------------------------------------------------
     | INVALID ACCOUNT
     |--------------------------------------------------------------------------
     */
-
     if (!$user) {
         $_SESSION['login_error'] = 'Invalid email or password.';
         return false;
@@ -125,13 +108,11 @@ function login_user(
         return false;
     }
 
-
     /*
     |--------------------------------------------------------------------------
     | VERIFY PASSWORD
     |--------------------------------------------------------------------------
     */
-
     if (
         !password_verify(
             $password,
@@ -139,179 +120,105 @@ function login_user(
         )
     ) {
 
-
         /*
         |--------------------------------------------------------------------------
         | INCREMENT FAILED ATTEMPTS
         |--------------------------------------------------------------------------
         */
-
-        $newFailedAttempts =
-            $failedAttempts + 1;
-
+        $newFailedAttempts = $failedAttempts + 1;
 
         /*
         |--------------------------------------------------------------------------
         | LOCK AFTER 5 FAILED ATTEMPTS
         |--------------------------------------------------------------------------
         */
-
         if ($newFailedAttempts >= 5) {
+            mcoll('users')->updateOne(
+                ['id' => $userId],
+                ['$set' => [
+                    'failed_attempts' => $newFailedAttempts,
+                    'status' => 'Inactive'
+                ]]
+            );
 
-            $stmt = $pdo->prepare("
-                UPDATE users
-                SET
-                    failed_attempts = ?,
-                    status = 'Inactive'
-                WHERE id = ?
-            ");
-
-            $stmt->execute([
-                $newFailedAttempts,
-                $userId
-            ]);
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | AUDIT LOG
-            |--------------------------------------------------------------------------
-            */
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 $userId,
                 'Account Locked',
                 'Account was locked after 5 failed login attempts.'
-            ]);
-
+            );
         } else {
+            mcoll('users')->updateOne(
+                ['id' => $userId],
+                ['$set' => [
+                    'failed_attempts' => $newFailedAttempts
+                ]]
+            );
 
-            $stmt = $pdo->prepare("
-                UPDATE users
-                SET failed_attempts = ?
-                WHERE id = ?
-            ");
-
-            $stmt->execute([
-                $newFailedAttempts,
-                $userId
-            ]);
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | AUDIT FAILED LOGIN
-            |--------------------------------------------------------------------------
-            */
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $stmt->execute([
+            mongo_audit_log(
                 $userId,
                 'Login Failed',
-                'Invalid password. Failed attempt #' .
-                $newFailedAttempts .
-                '.'
-            ]);
+                'Invalid password. Failed attempt #' . $newFailedAttempts . '.'
+            );
         }
 
         $_SESSION['login_error'] = 'Invalid email or password.';
         return false;
     }
 
-
     /*
     |--------------------------------------------------------------------------
     | SUCCESSFUL LOGIN
     |--------------------------------------------------------------------------
     */
-
     if (!headers_sent()) {
         session_regenerate_id(true);
     }
 
-
     /*
     |--------------------------------------------------------------------------
-    | RESET FAILED ATTEMPTS
+    | RESET FAILED ATTEMPTS & UPDATE LAST LOGIN (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
-
-    $stmt = $pdo->prepare("
-        UPDATE users
-        SET
-            failed_attempts = 0,
-            last_login = NOW()
-        WHERE id = ?
-    ");
-
-    $stmt->execute([
-        $userId
-    ]);
-
+    mcoll('users')->updateOne(
+        ['id' => $userId],
+        ['$set' => [
+            'failed_attempts' => 0,
+            'last_login' => date('Y-m-d H:i:s')
+        ]]
+    );
 
     /*
     |--------------------------------------------------------------------------
     | SESSION USER
     |--------------------------------------------------------------------------
     */
-
     $_SESSION['user'] = [
-        'id' => $user['id'],
-        'name' => $user['name'],
-        'email' => $user['email'],
-        'role' => $user['role'],
-        'level' => $user['level'] ?? 'L1',
-        'department' => $user['department'] ?? 'General',
-        'designation' => $user['designation'] ?? '',
+        'id' => (int)$user['id'],
+        'name' => (string)($user['name'] ?? ''),
+        'email' => (string)($user['email'] ?? ''),
+        'role' => (string)($user['role'] ?? 'Staff / Volunteer'),
+        'level' => (string)($user['level'] ?? 'L1'),
+        'department' => (string)($user['department'] ?? 'General'),
+        'designation' => (string)($user['designation'] ?? ''),
         'student_id' => $user['student_id'] ?? null,
         'phone' => $user['phone'] ?? null,
-        'reports_to_id' => $user['reports_to_id'] ?? null,
-        'backup_person_id' => $user['backup_person_id'] ?? null,
-        'protocol_level' => $user['protocol_level'] ?? 'None',
+        'reports_to_id' => $user['reports_to_id'] !== null ? (int)$user['reports_to_id'] : null,
+        'backup_person_id' => $user['backup_person_id'] !== null ? (int)$user['backup_person_id'] : null,
+        'protocol_level' => (string)($user['protocol_level'] ?? 'None'),
         'command_code' => $user['command_code'] ?? null,
         'avatar' => $user['avatar'] ?? null,
     ];
 
     /*
     |--------------------------------------------------------------------------
-    | AUDIT LOG
+    | AUDIT LOG (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
-
-    $stmt = $pdo->prepare("
-        INSERT INTO audit_logs
-        (
-            user_id,
-            action,
-            description
-        )
-        VALUES (?, ?, ?)
-    ");
-
-    $stmt->execute([
+    mongo_audit_log(
         $userId,
         'Login Successful',
         'User successfully signed into the BUP Protocol system.'
-    ]);
+    );
 
     return true;
 }

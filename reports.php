@@ -1,92 +1,31 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
 $page_title = 'Reports & Analytics | BUP Protocol';
-
 
 /*
 |--------------------------------------------------------------------------
-| BASIC EVENT STATS
+| BASIC EVENT STATS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 $stats = [
-
-    'events' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-    ")->fetchColumn(),
-
-    'upcoming' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE status = 'Upcoming'
-    ")->fetchColumn(),
-
-    'ongoing' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE status = 'Ongoing'
-    ")->fetchColumn(),
-
-    'completed' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE status = 'Completed'
-    ")->fetchColumn(),
-
-    'cancelled' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE status = 'Cancelled'
-    ")->fetchColumn(),
-
-    'guests' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM guests
-    ")->fetchColumn(),
-
-    'duties' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM duties
-    ")->fetchColumn(),
-
-    'done' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM duties
-        WHERE status = 'Completed'
-    ")->fetchColumn(),
-
-    'attendance' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM attendance
-        WHERE status = 'Present'
-    ")->fetchColumn(),
-
-    'attendance_total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM attendance
-    ")->fetchColumn(),
-
-    'protocol_total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM protocol_items
-    ")->fetchColumn(),
-
-    'protocol_done' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM protocol_items
-        WHERE completed = 1
-    ")->fetchColumn(),
-
-    'transport' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM transport
-    ")->fetchColumn()
+    'events' => mcoll('events')->countDocuments(),
+    'upcoming' => mcoll('events')->countDocuments(['status' => 'Upcoming']),
+    'ongoing' => mcoll('events')->countDocuments(['status' => 'Ongoing']),
+    'completed' => mcoll('events')->countDocuments(['status' => 'Completed']),
+    'cancelled' => mcoll('events')->countDocuments(['status' => 'Cancelled']),
+    'guests' => mcoll('guests')->countDocuments(),
+    'duties' => mcoll('duties')->countDocuments(),
+    'done' => mcoll('duties')->countDocuments(['status' => 'Completed']),
+    'attendance' => mcoll('attendance')->countDocuments(['status' => 'Present']),
+    'attendance_total' => mcoll('attendance')->countDocuments(),
+    'protocol_total' => mcoll('protocol_items')->countDocuments(),
+    'protocol_done' => mcoll('protocol_items')->countDocuments(['completed' => ['$in' => [1, true, '1']]]),
+    'transport' => mcoll('transport')->countDocuments()
 ];
-
 
 /*
 |--------------------------------------------------------------------------
@@ -95,135 +34,166 @@ $stats = [
 */
 
 $duty_completion = $stats['duties'] > 0
-    ? round(
-        ($stats['done'] / $stats['duties']) * 100
-    )
+    ? (int)round(($stats['done'] / $stats['duties']) * 100)
     : 0;
-
 
 $event_completion = $stats['events'] > 0
-    ? round(
-        ($stats['completed'] / $stats['events']) * 100
-    )
+    ? (int)round(($stats['completed'] / $stats['events']) * 100)
     : 0;
-
 
 $attendance_rate = $stats['attendance_total'] > 0
-    ? round(
-        ($stats['attendance'] / $stats['attendance_total']) * 100
-    )
+    ? (int)round(($stats['attendance'] / $stats['attendance_total']) * 100)
     : 0;
-
 
 $protocol_completion = $stats['protocol_total'] > 0
-    ? round(
-        ($stats['protocol_done'] / $stats['protocol_total']) * 100
-    )
+    ? (int)round(($stats['protocol_done'] / $stats['protocol_total']) * 100)
     : 0;
 
-
 /*
 |--------------------------------------------------------------------------
-| EVENT TYPE ANALYTICS
+| EVENT TYPE ANALYTICS (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$event_types = $pdo->query("
-    SELECT
-        event_type,
-        COUNT(*) AS total
-    FROM events
-    GROUP BY event_type
-    ORDER BY total DESC
-")->fetchAll();
-
-
-/*
-|--------------------------------------------------------------------------
-| DUTY STATUS ANALYTICS
-|--------------------------------------------------------------------------
-*/
-
-$duty_status = $pdo->query("
-    SELECT
-        status,
-        COUNT(*) AS total
-    FROM duties
-    GROUP BY status
-    ORDER BY total DESC
-")->fetchAll();
-
+$typeAgg = mcoll('events')->aggregate([
+    [
+        '$group' => [
+            '_id' => '$event_type',
+            'total' => ['$sum' => 1]
+        ]
+    ],
+    ['$sort' => ['total' => -1]]
+]);
+$event_types = [];
+foreach ($typeAgg as $doc) {
+    $event_types[] = [
+        'event_type' => $doc['_id'] ?? 'General',
+        'total' => (int)($doc['total'] ?? 0)
+    ];
+}
 
 /*
 |--------------------------------------------------------------------------
-| GUEST CATEGORY ANALYTICS
+| DUTY STATUS ANALYTICS (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$guest_categories = $pdo->query("
-    SELECT
-        category,
-        COUNT(*) AS total
-    FROM guests
-    GROUP BY category
-    ORDER BY total DESC
-")->fetchAll();
-
+$dutyAgg = mcoll('duties')->aggregate([
+    [
+        '$group' => [
+            '_id' => '$status',
+            'total' => ['$sum' => 1]
+        ]
+    ],
+    ['$sort' => ['total' => -1]]
+]);
+$duty_status = [];
+foreach ($dutyAgg as $doc) {
+    $duty_status[] = [
+        'status' => $doc['_id'] ?? 'Pending',
+        'total' => (int)($doc['total'] ?? 0)
+    ];
+}
 
 /*
 |--------------------------------------------------------------------------
-| GUEST PRIORITY ANALYTICS
+| GUEST CATEGORY ANALYTICS (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$guest_priorities = $pdo->query("
-    SELECT
-        priority_level,
-        COUNT(*) AS total
-    FROM guests
-    GROUP BY priority_level
-    ORDER BY total DESC
-")->fetchAll();
-
+$catAgg = mcoll('guests')->aggregate([
+    [
+        '$group' => [
+            '_id' => '$category',
+            'total' => ['$sum' => 1]
+        ]
+    ],
+    ['$sort' => ['total' => -1]]
+]);
+$guest_categories = [];
+foreach ($catAgg as $doc) {
+    $guest_categories[] = [
+        'category' => $doc['_id'] ?? 'General',
+        'total' => (int)($doc['total'] ?? 0)
+    ];
+}
 
 /*
 |--------------------------------------------------------------------------
-| RECENT EVENTS
+| GUEST PRIORITY ANALYTICS (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$recent_events = $pdo->query("
-    SELECT
-        e.*,
-        u.name AS creator
-    FROM events e
-    LEFT JOIN users u
-        ON u.id = e.created_by
-    ORDER BY
-        e.event_date DESC,
-        e.event_time DESC
-    LIMIT 8
-")->fetchAll();
-
+$prioAgg = mcoll('guests')->aggregate([
+    [
+        '$group' => [
+            '_id' => '$priority_level',
+            'total' => ['$sum' => 1]
+        ]
+    ],
+    ['$sort' => ['total' => -1]]
+]);
+$guest_priorities = [];
+foreach ($prioAgg as $doc) {
+    $guest_priorities[] = [
+        'priority_level' => $doc['_id'] ?? 'Normal',
+        'total' => (int)($doc['total'] ?? 0)
+    ];
+}
 
 /*
 |--------------------------------------------------------------------------
-| RECENT AUDIT ACTIVITY
+| RECENT EVENTS (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$recent_audit = $pdo->query("
-    SELECT
-        a.*,
-        u.name AS user_name
-    FROM audit_logs a
-    LEFT JOIN users u
-        ON u.id = a.user_id
-    ORDER BY
-        a.created_at DESC
-    LIMIT 8
-")->fetchAll();
+$recentEvAgg = mcoll('events')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'created_by',
+            'foreignField' => 'id',
+            'as' => 'creator_user'
+        ]
+    ],
+    ['$unwind' => ['path' => '$creator_user', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['event_date' => -1, 'event_time' => -1]],
+    ['$limit' => 8]
+]);
+$recent_events = [];
+foreach ($recentEvAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['creator'] = $row['creator_user']['name'] ?? 'System';
+    unset($row['creator_user']);
+    $recent_events[] = $row;
+}
 
+/*
+|--------------------------------------------------------------------------
+| RECENT AUDIT ACTIVITY (MongoDB Atlas Aggregation Pipeline)
+|--------------------------------------------------------------------------
+*/
+
+$recentAudAgg = mcoll('audit_logs')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'user_id',
+            'foreignField' => 'id',
+            'as' => 'log_user'
+        ]
+    ],
+    ['$unwind' => ['path' => '$log_user', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['created_at' => -1, 'id' => -1]],
+    ['$limit' => 8]
+]);
+$recent_audit = [];
+foreach ($recentAudAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['user_name'] = $row['log_user']['name'] ?? 'System';
+    unset($row['log_user']);
+    $recent_audit[] = $row;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -232,13 +202,9 @@ $recent_audit = $pdo->query("
 */
 
 $event_statuses = [
-
     'Upcoming' => $stats['upcoming'],
-
     'Ongoing' => $stats['ongoing'],
-
     'Completed' => $stats['completed'],
-
     'Cancelled' => $stats['cancelled']
 ];
 
@@ -254,136 +220,351 @@ if ($is_military_protocol) {
     $report_tab = trim($_GET['tab'] ?? 'executive');
 }
 
-// Budget summary report
-$budget_summary = $pdo->query("
-    SELECT
-        e.id, e.name, e.budget_total, e.budget_approved, e.budget_notes,
-        u.name AS director_name,
-        COALESCE(SUM(CASE WHEN b.approved_amount > 0 THEN b.approved_amount ELSE b.requested_amount END), 0) AS itemized_total
-    FROM events e
-    LEFT JOIN users u ON u.id = e.event_director_id
-    LEFT JOIN budget_items b ON b.event_id = e.id
-    GROUP BY e.id
-    ORDER BY e.event_date DESC
-")->fetchAll();
+// Budget summary report (MongoDB Atlas)
+$budgetAgg = mcoll('events')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'event_director_id',
+            'foreignField' => 'id',
+            'as' => 'director'
+        ]
+    ],
+    ['$unwind' => ['path' => '$director', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'budget_items',
+            'localField' => 'id',
+            'foreignField' => 'event_id',
+            'as' => 'items'
+        ]
+    ],
+    ['$sort' => ['event_date' => -1]]
+]);
+$budget_summary = [];
+foreach ($budgetAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $items = $row['items'] ?? [];
+    $itemized_total = 0;
+    foreach ($items as $it) {
+        $app = (float)($it['approved_amount'] ?? 0);
+        $req = (float)($it['requested_amount'] ?? 0);
+        $itemized_total += ($app > 0 ? $app : $req);
+    }
+    $budget_summary[] = [
+        'id' => $row['id'],
+        'name' => $row['name'] ?? '',
+        'budget_total' => $row['budget_total'] ?? 0,
+        'budget_approved' => $row['budget_approved'] ?? 0,
+        'budget_notes' => $row['budget_notes'] ?? '',
+        'director_name' => $row['director']['name'] ?? null,
+        'itemized_total' => $itemized_total
+    ];
+}
 
-// Seating capacity & allocation report
-$seating_summary = $pdo->query("
-    SELECT
-        e.name AS event_name,
-        e.mode,
-        e.venue,
-        COUNT(s.id) AS total_seats,
-        COALESCE(SUM(s.guest_id IS NOT NULL), 0) AS allocated_seats,
-        COALESCE(SUM(s.seat_type = 'VIP' OR s.seat_type = 'Reserved'), 0) AS reserved_seats,
-        GREATEST(0, COUNT(s.id) - COALESCE(SUM(s.guest_id IS NOT NULL), 0)) AS available_seats
-    FROM events e
-    LEFT JOIN seating_assignments s ON s.event_id = e.id
-    GROUP BY e.id
-    ORDER BY e.event_date DESC
-")->fetchAll();
+// Seating capacity & allocation report (MongoDB Atlas)
+$seatingAgg = mcoll('events')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'seating_assignments',
+            'localField' => 'id',
+            'foreignField' => 'event_id',
+            'as' => 'seats'
+        ]
+    ],
+    ['$sort' => ['event_date' => -1]]
+]);
+$seating_summary = [];
+foreach ($seatingAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $seats = $row['seats'] ?? [];
+    $total_seats = count($seats);
+    $allocated_seats = 0;
+    $reserved_seats = 0;
+    foreach ($seats as $s) {
+        if (!empty($s['guest_id'])) {
+            $allocated_seats++;
+        }
+        $st = $s['seat_type'] ?? '';
+        if ($st === 'VIP' || $st === 'Reserved') {
+            $reserved_seats++;
+        }
+    }
+    $seating_summary[] = [
+        'event_name' => $row['name'] ?? '',
+        'mode' => $row['mode'] ?? 'In-Person',
+        'venue' => $row['venue'] ?? '',
+        'total_seats' => $total_seats,
+        'allocated_seats' => $allocated_seats,
+        'reserved_seats' => $reserved_seats,
+        'available_seats' => max(0, $total_seats - $allocated_seats)
+    ];
+}
 
-// Team department report
-$team_summary = $pdo->query("
-    SELECT
-        d.department,
-        COUNT(d.id) AS total_duties,
-        COALESCE(SUM(d.status = 'Completed'), 0) AS completed,
-        COALESCE(SUM(d.status IN ('In Progress', 'Ongoing')), 0) AS in_progress,
-        COALESCE(SUM(d.status IN ('Pending', 'Assigned', 'Accepted')), 0) AS pending
-    FROM duties d
-    WHERE d.department IS NOT NULL AND d.department != ''
-    GROUP BY d.department
-")->fetchAll();
+// Team department report (MongoDB Atlas)
+$teamAgg = mcoll('duties')->aggregate([
+    [
+        '$match' => [
+            'department' => ['$ne' => null, '$ne' => '']
+        ]
+    ],
+    [
+        '$group' => [
+            '_id' => '$department',
+            'total_duties' => ['$sum' => 1],
+            'completed' => [
+                '$sum' => [
+                    '$cond' => [['$eq' => ['$status', 'Completed']], 1, 0]
+                ]
+            ],
+            'in_progress' => [
+                '$sum' => [
+                    '$cond' => [['$in' => ['$status', ['In Progress', 'Ongoing']]], 1, 0]
+                ]
+            ],
+            'pending' => [
+                '$sum' => [
+                    '$cond' => [['$in' => ['$status', ['Pending', 'Assigned', 'Accepted']]], 1, 0]
+                ]
+            ]
+        ]
+    ],
+    ['$sort' => ['_id' => 1]]
+]);
+$team_summary = [];
+foreach ($teamAgg as $doc) {
+    $team_summary[] = [
+        'department' => $doc['_id'] ?? '',
+        'total_duties' => (int)($doc['total_duties'] ?? 0),
+        'completed' => (int)($doc['completed'] ?? 0),
+        'in_progress' => (int)($doc['in_progress'] ?? 0),
+        'pending' => (int)($doc['pending'] ?? 0)
+    ];
+}
 
-// Protocol hierarchy report
-$protocol_units_report = $pdo->query("
-    SELECT
-        u.code AS unit_code,
-        u.name AS unit_name,
-        u.level AS protocol_level,
-        u.hq_location AS location,
-        u.status,
-        12 AS strength,
-        usr.name AS commander_name,
-        usr.designation AS commander_designation
-    FROM military_protocol_units u
-    LEFT JOIN users usr ON usr.id = u.commander_id
-    ORDER BY u.sort_order ASC, u.id ASC
-")->fetchAll();
+// Protocol hierarchy report (MongoDB Atlas)
+$protoUnitsAgg = mcoll('military_protocol_units')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'commander_id',
+            'foreignField' => 'id',
+            'as' => 'commander'
+        ]
+    ],
+    ['$unwind' => ['path' => '$commander', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['sort_order' => 1, 'id' => 1]]
+]);
+$protocol_units_report = [];
+foreach ($protoUnitsAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $protocol_units_report[] = [
+        'unit_code' => $row['code'] ?? '',
+        'unit_name' => $row['name'] ?? '',
+        'protocol_level' => $row['level'] ?? '',
+        'location' => $row['hq_location'] ?? '',
+        'status' => $row['status'] ?? 'Active',
+        'strength' => 12,
+        'commander_name' => $row['commander']['name'] ?? null,
+        'commander_designation' => $row['commander']['designation'] ?? null
+    ];
+}
 
-// Protocol items report
-$protocol_items_report = $pdo->query("
-    SELECT
-        p.id, p.item, p.instructions, p.completed, p.sort_order,
-        e.name AS event_name
-    FROM protocol_items p
-    LEFT JOIN events e ON e.id = p.event_id
-    ORDER BY p.sort_order ASC, p.id ASC
-")->fetchAll();
+// Protocol items report (MongoDB Atlas)
+$protoItemsAgg = mcoll('protocol_items')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['sort_order' => 1, 'id' => 1]]
+]);
+$protocol_items_report = [];
+foreach ($protoItemsAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    unset($row['event']);
+    $protocol_items_report[] = $row;
+}
 
-// Military SOPs report
-$military_sops_report = $pdo->query("
-    SELECT code, title, category, applicable_level, authorized_by, status
-    FROM military_sops
-    WHERE status = 'Active'
-    ORDER BY id ASC
-")->fetchAll();
+// Military SOPs report (MongoDB Atlas)
+$sopsCursor = mcoll('military_sops')->find(
+    ['status' => 'Active'],
+    ['sort' => ['id' => 1]]
+);
+$military_sops_report = [];
+foreach ($sopsCursor as $doc) {
+    $s = mongo_doc_to_array($doc);
+    $military_sops_report[] = [
+        'code' => $s['code'] ?? '',
+        'title' => $s['title'] ?? '',
+        'category' => $s['category'] ?? '',
+        'applicable_level' => $s['applicable_level'] ?? '',
+        'authorized_by' => $s['authorized_by'] ?? '',
+        'status' => $s['status'] ?? 'Active'
+    ];
+}
 
-// Duty operational report
-$duty_report = $pdo->query("
-    SELECT
-        d.title, d.department, d.level, d.duty_date, d.time_slot, d.location, d.status, d.priority,
-        e.name AS event_name,
-        u.name AS assignee_name,
-        sup.name AS supervisor_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u ON u.id = d.assigned_to
-    LEFT JOIN users sup ON sup.id = d.supervisor_id
-    ORDER BY d.duty_date DESC, d.id DESC
-    LIMIT 25
-")->fetchAll();
+// Duty operational report (MongoDB Atlas)
+$dutyRepAgg = mcoll('duties')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'assigned_to',
+            'foreignField' => 'id',
+            'as' => 'assignee'
+        ]
+    ],
+    ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'supervisor_id',
+            'foreignField' => 'id',
+            'as' => 'supervisor'
+        ]
+    ],
+    ['$unwind' => ['path' => '$supervisor', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['duty_date' => -1, 'id' => -1]],
+    ['$limit' => 25]
+]);
+$duty_report = [];
+foreach ($dutyRepAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    $row['assignee_name'] = $row['assignee']['name'] ?? null;
+    $row['supervisor_name'] = $row['supervisor']['name'] ?? null;
+    unset($row['event'], $row['assignee'], $row['supervisor']);
+    $duty_report[] = $row;
+}
 
-// Attendance guest checkin report
-$attendance_report = $pdo->query("
-    SELECT
-        a.id, a.qr_token, a.status, a.checkin_at,
-        g.name AS guest_name, g.designation, g.organization, g.category,
-        e.name AS event_name
-    FROM attendance a
-    LEFT JOIN guests g ON g.id = a.guest_id
-    LEFT JOIN events e ON e.id = a.event_id
-    ORDER BY a.checkin_at DESC, a.id DESC
-    LIMIT 25
-")->fetchAll();
+// Attendance guest checkin report (MongoDB Atlas)
+$attRepAgg = mcoll('attendance')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'guests',
+            'localField' => 'guest_id',
+            'foreignField' => 'id',
+            'as' => 'guest'
+        ]
+    ],
+    ['$unwind' => ['path' => '$guest', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['checkin_at' => -1, 'id' => -1]],
+    ['$limit' => 25]
+]);
+$attendance_report = [];
+foreach ($attRepAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['guest_name'] = $row['guest']['name'] ?? null;
+    $row['designation'] = $row['guest']['designation'] ?? null;
+    $row['organization'] = $row['guest']['organization'] ?? null;
+    $row['category'] = $row['guest']['category'] ?? null;
+    $row['event_name'] = $row['event']['name'] ?? null;
+    unset($row['guest'], $row['event']);
+    $attendance_report[] = $row;
+}
 
-// Events overview report
-$events_report = $pdo->query("
-    SELECT
-        e.id, e.name, e.event_type, e.event_date, e.event_time, e.venue, e.status, e.mode,
-        e.budget_total,
-        dir.name AS director_name,
-        coord.name AS coordinator_name,
-        (SELECT COUNT(*) FROM guests WHERE event_id = e.id) AS guest_count,
-        (SELECT COUNT(*) FROM duties WHERE event_id = e.id) AS duty_count
-    FROM events e
-    LEFT JOIN users dir ON dir.id = e.event_director_id
-    LEFT JOIN users coord ON coord.id = e.event_coordinator_id
-    ORDER BY e.event_date DESC, e.id DESC
-")->fetchAll();
+// Events overview report (MongoDB Atlas)
+$evRepAgg = mcoll('events')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'event_director_id',
+            'foreignField' => 'id',
+            'as' => 'director'
+        ]
+    ],
+    ['$unwind' => ['path' => '$director', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'event_coordinator_id',
+            'foreignField' => 'id',
+            'as' => 'coordinator'
+        ]
+    ],
+    ['$unwind' => ['path' => '$coordinator', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'guests',
+            'localField' => 'id',
+            'foreignField' => 'event_id',
+            'as' => 'guests'
+        ]
+    ],
+    [
+        '$lookup' => [
+            'from' => 'duties',
+            'localField' => 'id',
+            'foreignField' => 'event_id',
+            'as' => 'duties'
+        ]
+    ],
+    ['$sort' => ['event_date' => -1, 'id' => -1]]
+]);
+$events_report = [];
+foreach ($evRepAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['director_name'] = $row['director']['name'] ?? null;
+    $row['coordinator_name'] = $row['coordinator']['name'] ?? null;
+    $row['guest_count'] = count($row['guests'] ?? []);
+    $row['duty_count'] = count($row['duties'] ?? []);
+    unset($row['director'], $row['coordinator'], $row['guests'], $row['duties']);
+    $events_report[] = $row;
+}
 
-// Guests detailed report
-$guests_report = $pdo->query("
-    SELECT
-        g.id, g.name, g.designation, g.organization, g.category, g.priority_level, g.phone, g.email, g.arrival_status,
-        e.name AS event_name,
-        COALESCE(sa.seat_code, g.assigned_seat, 'Unassigned') AS seat_label
-    FROM guests g
-    LEFT JOIN events e ON e.id = g.event_id
-    LEFT JOIN seating_assignments sa ON sa.guest_id = g.id
-    ORDER BY g.id DESC
-")->fetchAll();
+// Guests detailed report (MongoDB Atlas)
+$guestRepAgg = mcoll('guests')->aggregate([
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'seating_assignments',
+            'localField' => 'id',
+            'foreignField' => 'guest_id',
+            'as' => 'seat'
+        ]
+    ],
+    ['$unwind' => ['path' => '$seat', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['id' => -1]]
+]);
+$guests_report = [];
+foreach ($guestRepAgg as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    $row['seat_label'] = $row['seat']['seat_code'] ?? ($row['assigned_seat'] ?? 'Unassigned');
+    unset($row['event'], $row['seat']);
+    $guests_report[] = $row;
+}
 
 require __DIR__ . '/includes/header.php';
 ?>

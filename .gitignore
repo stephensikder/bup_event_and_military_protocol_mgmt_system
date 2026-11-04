@@ -2,6 +2,7 @@
 config/mail.php
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 
@@ -18,4 +19,8 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Dependencies
+vendor/
+
 

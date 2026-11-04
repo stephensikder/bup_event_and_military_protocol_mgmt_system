@@ -2,9 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
 $page_title = 'Transport & Fleet Logistics | BUP Protocol';
 
 // Permissions check
@@ -14,7 +14,7 @@ if (is_student() || is_staff()) {
 }
 
 // =====================================================
-// HANDLE ACTIONS (CREATE / EDIT / DELETE)
+// HANDLE ACTIONS (CREATE / EDIT / DELETE) - MongoDB Atlas
 // =====================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -36,38 +36,51 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         try {
             if ($action === 'create') {
-                $stmt = $pdo->prepare("
-                    INSERT INTO transport 
-                    (event_id, guest_name, vehicle_no, driver_name, parking_slot, arrival_expected, arrival_actual, accommodation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([
-                    $event_id, $guest_name, $vehicle_no, $driver_name, $parking_slot, $arrival_expected, $arrival_actual, $accommodation
+                $newId = mongo_next_id('transport');
+                mcoll('transport')->insertOne([
+                    'id' => $newId,
+                    'event_id' => $event_id,
+                    'guest_name' => $guest_name,
+                    'vehicle_no' => $vehicle_no,
+                    'driver_name' => $driver_name,
+                    'parking_slot' => $parking_slot,
+                    'arrival_expected' => $arrival_expected,
+                    'arrival_actual' => $arrival_actual,
+                    'accommodation' => $accommodation,
+                    'created_at' => date('Y-m-d H:i:s')
                 ]);
-                $newId = (int)$pdo->lastInsertId();
 
-                $audit = $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Transport Created', ?)");
-                $audit->execute([current_user()['id'], "Created transport entry #{$newId} for guest: {$guest_name} (Vehicle: {$vehicle_no})"]);
+                mongo_audit_log(
+                    'Transport Created',
+                    "Created transport entry #{$newId} for guest: {$guest_name} (Vehicle: {$vehicle_no})"
+                );
 
                 flash('success', 'Transport dispatch record created successfully.');
             } else {
                 $id = (int)($_POST['id'] ?? 0);
-                $stmt = $pdo->prepare("
-                    UPDATE transport 
-                    SET event_id = ?, guest_name = ?, vehicle_no = ?, driver_name = ?, parking_slot = ?, arrival_expected = ?, arrival_actual = ?, accommodation = ?
-                    WHERE id = ?
-                ");
-                $stmt->execute([
-                    $event_id, $guest_name, $vehicle_no, $driver_name, $parking_slot, $arrival_expected, $arrival_actual, $accommodation, $id
-                ]);
+                mcoll('transport')->updateOne(
+                    ['id' => $id],
+                    ['$set' => [
+                        'event_id' => $event_id,
+                        'guest_name' => $guest_name,
+                        'vehicle_no' => $vehicle_no,
+                        'driver_name' => $driver_name,
+                        'parking_slot' => $parking_slot,
+                        'arrival_expected' => $arrival_expected,
+                        'arrival_actual' => $arrival_actual,
+                        'accommodation' => $accommodation,
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ]]
+                );
 
-                $audit = $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Transport Updated', ?)");
-                $audit->execute([current_user()['id'], "Updated transport entry #{$id} for guest: {$guest_name}"]);
+                mongo_audit_log(
+                    'Transport Updated',
+                    "Updated transport entry #{$id} for guest: {$guest_name}"
+                );
 
                 flash('success', 'Transport dispatch record updated successfully.');
             }
 
-            mongo_sync_table('transport');
             redirect(BASE_URL . '/transport.php');
         } catch (Exception $e) {
             flash('error', 'Database operation failed: ' . $e->getMessage());
@@ -78,13 +91,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            $stmt = $pdo->prepare("DELETE FROM transport WHERE id = ?");
-            $stmt->execute([$id]);
+            mcoll('transport')->deleteOne(['id' => $id]);
 
-            $audit = $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Transport Deleted', ?)");
-            $audit->execute([current_user()['id'], "Deleted transport entry #{$id}"]);
+            mongo_audit_log(
+                'Transport Deleted',
+                "Deleted transport entry #{$id}"
+            );
 
-            mongo_sync_table('transport');
             flash('success', 'Transport entry deleted.');
         }
         redirect(BASE_URL . '/transport.php');
@@ -93,100 +106,93 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'mark_arrived') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            $stmt = $pdo->prepare("UPDATE transport SET arrival_actual = NOW() WHERE id = ?");
-            $stmt->execute([$id]);
+            $now = date('Y-m-d H:i:s');
+            mcoll('transport')->updateOne(
+                ['id' => $id],
+                ['$set' => ['arrival_actual' => $now]]
+            );
 
-            mongo_sync_table('transport');
             flash('success', 'Guest arrival confirmed and logged.');
         }
         redirect(BASE_URL . '/transport.php');
     }
 }
 
-// Fetch events for selection
-$events = $pdo->query("SELECT id, name, event_date FROM events ORDER BY event_date DESC")->fetchAll();
+// =====================================================
+// DATA FETCHING & FILTERING (MongoDB Atlas)
+// =====================================================
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
-// Fetch registered guests for VIP dropdown
-$guests_list = $pdo->query("SELECT id, name, organization, designation, priority_level FROM guests ORDER BY name ASC")->fetchAll();
+$guestsCursor = mcoll('guests')->find([], ['sort' => ['name' => 1]]);
+$guests_list = [];
+foreach ($guestsCursor as $gDoc) {
+    $guests_list[] = mongo_doc_to_array($gDoc);
+}
 
-// Designated BUP fleet vehicles
-$bup_vehicles = [
-    'BUP-V-101 (Toyota Coaster VIP Bus)',
-    'BUP-V-102 (Toyota HiAce Microbus)',
-    'BUP-V-103 (Toyota Prado TX - Command SUV)',
-    'BUP-V-104 (Toyota Corolla Altis - Protocol Sedan)',
-    'BUP-V-105 (Toyota Camry Hybrid - VIP Protocol)',
-    'BUP-V-106 (Mitsubishi Pajero Sport - Security Escort)',
-    'BUP-V-107 (Nissan Civilian 30-Seater Shuttle)',
-    'BUP-V-108 (Isuzu D-Max Protocol Support Truck)'
-];
-
-// Assigned official drivers
-$bup_drivers = [
-    'Subedar Kabir Hossain (01711-234501)',
-    'Havildar M. Rafiqul Islam (01819-345602)',
-    'Naik Abdur Rahim (01912-456703)',
-    'Lance Naik Jahangir Alam (01611-567804)',
-    'Md. Tariqul Islam (01722-678905)',
-    'Md. Sohel Rana (01833-789006)'
-];
-
-// Reserved parking bays and plots
-$parking_bays = [
-    'VIP Bay Alpha (VVIP Dais / Main Auditorium)',
-    'VIP Bay Bravo (Auditorium North Portico)',
-    'Parking Slot C-1 (Faculty of Arts & Social Sciences)',
-    'Parking Slot C-2 (Science & Technology Complex)',
-    'Holding Area Delta (Central Parade Grounds)',
-    'Security Escort Bay E (Main Entrance Gate 1)',
-    'Admin Portico Bay F (Vice Chancellor Complex)'
-];
-
-// Designated accommodations
-$accommodation_options = [
-    'BUP Officers Mess — VIP Suite 01',
-    'BUP Officers Mess — VIP Suite 02',
-    'Mirpur DOHS BUP Guest House — Executive Suite',
-    'Mirpur DOHS BUP Guest House — Deluxe Room 102',
-    'Commandant Protocol Suite — Main Campus',
-    'Auditorium Green Room VIP Lounge',
-    'Not Required (Day Visit / Non-Resident)'
-];
-
-// Filters
 $q = trim($_GET['q'] ?? '');
 $event_filter = (int)($_GET['event_id'] ?? 0);
 
-$query = "
-    SELECT t.*, e.name AS event_name, e.event_date 
-    FROM transport t
-    LEFT JOIN events e ON t.event_id = e.id
-    WHERE 1=1
-";
-$params = [];
+$pipeline = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
+$pipeline[] = [
+    '$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'event_date' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.event_date', 0]], '']]
+    ]
+];
+$pipeline[] = [
+    '$project' => ['event_docs' => 0]
+];
 
+$match = [];
 if ($q !== '') {
-    $query .= " AND (t.guest_name LIKE ? OR t.vehicle_no LIKE ? OR t.driver_name LIKE ? OR t.parking_slot LIKE ?)";
-    $like = "%{$q}%";
-    $params = array_merge($params, [$like, $like, $like, $like]);
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $match['$or'] = [
+        ['guest_name' => $regex],
+        ['vehicle_no' => $regex],
+        ['driver_name' => $regex],
+        ['parking_slot' => $regex]
+    ];
 }
 if ($event_filter > 0) {
-    $query .= " AND t.event_id = ?";
-    $params[] = $event_filter;
+    $match['event_id'] = $event_filter;
+}
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
 }
 
-$query .= " ORDER BY t.arrival_expected ASC, t.id DESC";
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$transports = $stmt->fetchAll();
+$pipeline[] = [
+    '$sort' => [
+        'arrival_expected' => 1,
+        'id' => -1
+    ]
+];
+
+$cursor = mcoll('transport')->aggregate($pipeline);
+$transports = [];
+foreach ($cursor as $doc) {
+    $transports[] = mongo_doc_to_array($doc);
+}
 
 // Edit record if requested
 $edit_entry = null;
 if (isset($_GET['edit'])) {
     $edit_id = (int)$_GET['edit'];
-    $stmtEdit = $pdo->prepare("SELECT * FROM transport WHERE id = ? LIMIT 1");
-    $stmtEdit->execute([$edit_id]);
-    $edit_entry = $stmtEdit->fetch();
+    $editDoc = mcoll('transport')->findOne(['id' => $edit_id]);
+    if ($editDoc) {
+        $edit_entry = mongo_doc_to_array($editDoc);
+    }
 }
 
 // Summary Metrics
@@ -200,6 +206,7 @@ foreach ($transports as $t) {
         $pending_count++;
     }
 }
+
 
 require __DIR__ . '/includes/header.php';
 ?>

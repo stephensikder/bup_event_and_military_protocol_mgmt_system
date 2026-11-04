@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+config/mail.php
+vendor/
+Dockerfile
+.dockerignore
+*.log
+*.tmp
+*.bak
+C:/mongodb_backups
+database/*.sql

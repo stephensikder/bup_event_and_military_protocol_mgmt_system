@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 if (is_student()) {
@@ -12,7 +13,6 @@ if (is_security_lead() || is_logistics_lead() || is_communication_lead()) {
     redirect(BASE_URL . '/dashboard.php');
 }
 
-$pdo = db();
 $page_title = 'Auditorium Seating Plan | BUP Protocol';
 
 $redirectTo = static function (int $eventId): void {
@@ -185,14 +185,16 @@ function get_venue_layout(string $venue_name): array {
 }
 
 /* =========================================================
-   LOAD EVENTS
+   LOAD EVENTS (MongoDB Atlas)
 ========================================================= */
-$events = $pdo->query("
-    SELECT id, name, event_date, event_time, venue, status, mode, meeting_link
-    FROM events
-    WHERE status != 'Completed'
-    ORDER BY event_date DESC, event_time DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find(
+    ['status' => ['$ne' => 'Completed']],
+    ['sort' => ['event_date' => -1, 'event_time' => -1]]
+);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
 $selected = (int)($_GET['event_id'] ?? ($events[0]['id'] ?? 0));
 $selectedEvent = null;
@@ -274,14 +276,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Verify guest belongs to event
-        $stmt = $pdo->prepare("SELECT id, name, category, priority_level FROM guests WHERE id = ? AND event_id = ?");
-        $stmt->execute([$guestId, $eventId]);
-        $guest = $stmt->fetch();
+        $guestDoc = mcoll('guests')->findOne(['id' => $guestId, 'event_id' => $eventId]);
 
-        if (!$guest) {
+        if (!$guestDoc) {
             flash('error', 'Guest does not belong to this event.');
             $redirectTo($eventId);
         }
+        $guest = mongo_doc_to_array($guestDoc);
 
         // Extract numeric portion if any
         preg_match('/\d+/', $seatCode, $numMatch);
@@ -289,29 +290,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             // Delete any existing seat assignment for this guest (reassignment)
-            $pdo->prepare("DELETE FROM seating_assignments WHERE event_id = ? AND guest_id = ?")->execute([$eventId, $guestId]);
+            mcoll('seating_assignments')->deleteMany(['event_id' => $eventId, 'guest_id' => $guestId]);
 
             // Delete any existing occupant of this specific seat
-            $pdo->prepare("DELETE FROM seating_assignments WHERE event_id = ? AND seat_code = ?")->execute([$eventId, $seatCode]);
+            mcoll('seating_assignments')->deleteMany(['event_id' => $eventId, 'seat_code' => $seatCode]);
 
             // Insert new assignment
-            $stmt = $pdo->prepare("
-                INSERT INTO seating_assignments 
-                    (event_id, guest_id, seat_code, seat_number, section_name, seat_type, assigned_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $eventId,
-                $guestId,
-                $seatCode,
-                $seatNumber,
-                $sectionName,
-                $seatType,
-                current_user()['id'] ?? null
+            $assignId = mongo_next_id('seating_assignments');
+            mcoll('seating_assignments')->insertOne([
+                'id' => $assignId,
+                'event_id' => $eventId,
+                'guest_id' => $guestId,
+                'seat_code' => $seatCode,
+                'seat_number' => $seatNumber,
+                'section_name' => $sectionName,
+                'seat_type' => $seatType,
+                'assigned_by' => current_user()['id'] ?? null,
+                'created_at' => date('Y-m-d H:i:s')
             ]);
 
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'] ?? null, 'Seat Assigned', "Assigned {$guest['name']} to seat {$seatCode}"]);
+            mongo_audit_log('Seat Assigned', "Assigned {$guest['name']} to seat {$seatCode}");
 
             flash('success', "Assigned {$guest['name']} to Seat {$seatCode} successfully!");
         } catch (Throwable $e) {
@@ -327,10 +325,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $assignmentId = (int)($_POST['assignment_id'] ?? 0);
 
         if ($assignmentId > 0) {
-            $pdo->prepare("DELETE FROM seating_assignments WHERE id = ? AND event_id = ?")->execute([$assignmentId, $eventId]);
+            mcoll('seating_assignments')->deleteOne(['id' => $assignmentId, 'event_id' => $eventId]);
             flash('success', 'Seat assignment removed.');
         } elseif ($seatCode !== '') {
-            $pdo->prepare("DELETE FROM seating_assignments WHERE seat_code = ? AND event_id = ?")->execute([$seatCode, $eventId]);
+            mcoll('seating_assignments')->deleteOne(['seat_code' => $seatCode, 'event_id' => $eventId]);
             flash('success', "Seat {$seatCode} unassigned.");
         }
 
@@ -339,20 +337,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 3. Auto-Assign VIPs to Row A & B
     if ($action === 'auto_assign_vips') {
-        $unassignedVips = $pdo->prepare("
-            SELECT g.id, g.name, g.priority_level 
-            FROM guests g
-            LEFT JOIN seating_assignments sa ON sa.guest_id = g.id AND sa.event_id = g.event_id
-            WHERE g.event_id = ? AND sa.id IS NULL AND (g.priority_level = 'VIP' OR g.category = 'VIP' OR g.priority_level = 'High')
-            ORDER BY g.priority_level = 'VIP' DESC, g.name ASC
-        ");
-        $unassignedVips->execute([$eventId]);
-        $vips = $unassignedVips->fetchAll();
+        // Find existing assigned guest IDs for this event
+        $assignedGuestIds = [];
+        $takenSeats = [];
+        $existingAssigns = mcoll('seating_assignments')->find(['event_id' => $eventId]);
+        foreach ($existingAssigns as $ea) {
+            $assignedGuestIds[] = (int)$ea['guest_id'];
+            $takenSeats[] = $ea['seat_code'];
+        }
 
-        // Get currently taken seats
-        $takenStmt = $pdo->prepare("SELECT seat_code FROM seating_assignments WHERE event_id = ?");
-        $takenStmt->execute([$eventId]);
-        $takenSeats = $takenStmt->fetchAll(PDO::FETCH_COLUMN);
+        // Find unassigned VIPs
+        $vipFilter = [
+            'event_id' => $eventId,
+            '$or' => [
+                ['priority_level' => 'VIP'],
+                ['category' => 'VIP'],
+                ['priority_level' => 'High']
+            ]
+        ];
+        if (!empty($assignedGuestIds)) {
+            $vipFilter['id'] = ['$nin' => $assignedGuestIds];
+        }
+
+        $vipsCursor = mcoll('guests')->aggregate([
+            ['$match' => $vipFilter],
+            ['$addFields' => [
+                'is_vip_prio' => ['$cond' => [['$eq' => ['$priority_level', 'VIP']], 1, 2]]
+            ]],
+            ['$sort' => ['is_vip_prio' => 1, 'name' => 1]]
+        ]);
+
+        $vips = [];
+        foreach ($vipsCursor as $vDoc) {
+            $vips[] = mongo_doc_to_array($vDoc);
+        }
 
         $assignedCount = 0;
         foreach ($vips as $vip) {
@@ -362,10 +380,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     preg_match('/\d+/', $code, $nm);
                     $num = !empty($nm[0]) ? (int)$nm[0] : 0;
 
-                    $pdo->prepare("
-                        INSERT INTO seating_assignments (event_id, guest_id, seat_code, seat_number, section_name, seat_type, assigned_by)
-                        VALUES (?, ?, ?, ?, 'VIP Tier', 'VIP', ?)
-                    ")->execute([$eventId, $vip['id'], $code, $num, current_user()['id'] ?? null]);
+                    $newId = mongo_next_id('seating_assignments');
+                    mcoll('seating_assignments')->insertOne([
+                        'id' => $newId,
+                        'event_id' => $eventId,
+                        'guest_id' => (int)$vip['id'],
+                        'seat_code' => $code,
+                        'seat_number' => $num,
+                        'section_name' => 'VIP Tier',
+                        'seat_type' => 'VIP',
+                        'assigned_by' => current_user()['id'] ?? null,
+                        'created_at' => date('Y-m-d H:i:s')
+                    ]);
 
                     $takenSeats[] = $code;
                     $assignedCount++;
@@ -380,7 +406,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 4. Clear all seating assignments for event
     if ($action === 'clear_all') {
-        $pdo->prepare("DELETE FROM seating_assignments WHERE event_id = ?")->execute([$eventId]);
+        mcoll('seating_assignments')->deleteMany(['event_id' => $eventId]);
         flash('success', 'All seat assignments for this event have been reset.');
         $redirectTo($eventId);
     }
@@ -395,43 +421,56 @@ $guestToSeatMap = [];
 
 if ($selectedEvent) {
     // Load guests
-    $stmt = $pdo->prepare("
-        SELECT id, name, designation, organization, category, priority_level, arrival_status
-        FROM guests
-        WHERE event_id = ?
-        ORDER BY
-            CASE
-                WHEN priority_level = 'VIP' THEN 1
-                WHEN category = 'VIP' THEN 2
-                WHEN priority_level = 'High' THEN 3
-                WHEN priority_level = 'Official' THEN 4
-                ELSE 5
-            END,
-            name ASC
-    ");
-    $stmt->execute([$selected]);
-    $guests = $stmt->fetchAll();
+    $guestCursor = mcoll('guests')->aggregate([
+        ['$match' => ['event_id' => $selected]],
+        ['$addFields' => [
+            'prio_order' => [
+                '$switch' => [
+                    'branches' => [
+                        ['case' => ['$eq' => ['$priority_level', 'VIP']], 'then' => 1],
+                        ['case' => ['$eq' => ['$category', 'VIP']], 'then' => 2],
+                        ['case' => ['$eq' => ['$priority_level', 'High']], 'then' => 3],
+                        ['case' => ['$eq' => ['$priority_level', 'Official']], 'then' => 4],
+                    ],
+                    'default' => 5
+                ]
+            ]
+        ]],
+        ['$sort' => ['prio_order' => 1, 'name' => 1]]
+    ]);
+
+    foreach ($guestCursor as $gDoc) {
+        $guests[] = mongo_doc_to_array($gDoc);
+    }
 
     // Load seating assignments
-    $stmt = $pdo->prepare("
-        SELECT sa.*,
-               g.name AS guest_name,
-               g.designation,
-               g.organization,
-               g.category,
-               g.priority_level
-        FROM seating_assignments sa
-        INNER JOIN guests g ON g.id = sa.guest_id
-        WHERE sa.event_id = ?
-        ORDER BY sa.seat_code ASC
-    ");
-    $stmt->execute([$selected]);
+    $saCursor = mcoll('seating_assignments')->aggregate([
+        ['$match' => ['event_id' => $selected]],
+        ['$lookup' => [
+            'from' => 'guests',
+            'localField' => 'guest_id',
+            'foreignField' => 'id',
+            'as' => 'guest_docs'
+        ]],
+        ['$match' => ['guest_docs' => ['$ne' => []]]],
+        ['$addFields' => [
+            'guest_name' => ['$arrayElemAt' => ['$guest_docs.name', 0]],
+            'designation' => ['$arrayElemAt' => ['$guest_docs.designation', 0]],
+            'organization' => ['$arrayElemAt' => ['$guest_docs.organization', 0]],
+            'category' => ['$arrayElemAt' => ['$guest_docs.category', 0]],
+            'priority_level' => ['$arrayElemAt' => ['$guest_docs.priority_level', 0]],
+        ]],
+        ['$project' => ['guest_docs' => 0]],
+        ['$sort' => ['seat_code' => 1]]
+    ]);
 
-    foreach ($stmt->fetchAll() as $assignment) {
+    foreach ($saCursor as $saDoc) {
+        $assignment = mongo_doc_to_array($saDoc);
         $assignments[$assignment['seat_code']] = $assignment;
         $guestToSeatMap[(int)$assignment['guest_id']] = $assignment['seat_code'];
     }
 }
+
 
 // Compute statistics
 $totalCapacity = count($allVenueSeats);

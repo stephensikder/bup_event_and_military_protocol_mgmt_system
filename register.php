@@ -5,7 +5,6 @@ if (is_logged_in()) {
     redirect(get_role_redirect_url());
 }
 
-$pdo = db();
 $error = null;
 $success = null;
 
@@ -28,60 +27,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($password !== $password_confirm) {
         $error = 'Passwords do not match. Please verify.';
     } else {
-        // Check if email already registered
-        $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
-        $checkStmt->execute([$email]);
-        if ($checkStmt->fetch()) {
+        // Check if email already registered (MongoDB Atlas)
+        $existing = mcoll('users')->findOne(['email' => $email]);
+        if ($existing) {
             $error = 'An account with this email address already exists. Please sign in or use another email.';
         } else {
             try {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("
-                    INSERT INTO users 
-                    (name, email, password_hash, role, level, department, designation, student_id, phone, status, failed_attempts)
-                    VALUES (?, ?, ?, 'Student', 'L5', ?, ?, ?, ?, 'Pending', 0)
-                ");
+                $newUserId = mongo_next_id('users');
                 $designation = 'BUP Student (' . $student_id . ')';
-                $stmt->execute([
-                    $name,
-                    $email,
-                    $hash,
-                    $department,
-                    $designation,
-                    $student_id,
-                    $phone
-                ]);
-                $newUserId = (int)$pdo->lastInsertId();
 
-                // Notify admin via announcement / audit log
-                $adminStmt = $pdo->prepare("
-                    INSERT INTO announcements (title, message, created_by)
-                    VALUES (?, ?, ?)
-                ");
-                $adminStmt->execute([
-                    'New Student Registration: ' . $name . ' (' . $student_id . ')',
-                    'A new student account registration was submitted by ' . $name . ' (' . $email . ', Dept: ' . $department . ', ID: ' . $student_id . '). Status: PENDING APPROVAL.',
-                    1 // Admin user ID
+                mcoll('users')->insertOne([
+                    'id' => $newUserId,
+                    'name' => $name,
+                    'email' => $email,
+                    'password_hash' => $hash,
+                    'role' => 'Student',
+                    'level' => 'L5',
+                    'department' => $department,
+                    'designation' => $designation,
+                    'student_id' => $student_id,
+                    'phone' => $phone,
+                    'status' => 'Pending',
+                    'failed_attempts' => 0,
+                    'reports_to_id' => null,
+                    'backup_person_id' => null,
+                    'protocol_level' => 'None',
+                    'command_code' => null,
+                    'avatar' => null,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'last_login' => null
                 ]);
 
-                // Audit log
-                $audit = $pdo->prepare("
-                    INSERT INTO audit_logs (user_id, action, description)
-                    VALUES (?, 'Student Registration', ?)
-                ");
-                $audit->execute([
+                // Notify admin via announcement (MongoDB Atlas)
+                $annId = mongo_next_id('announcements');
+                mcoll('announcements')->insertOne([
+                    'id' => $annId,
+                    'title' => 'New Student Registration: ' . $name . ' (' . $student_id . ')',
+                    'message' => 'A new student account registration was submitted by ' . $name . ' (' . $email . ', Dept: ' . $department . ', ID: ' . $student_id . '). Status: PENDING APPROVAL.',
+                    'created_by' => 1,
+                    'created_at' => date('Y-m-d H:i:s')
+                ]);
+
+                // Audit log (MongoDB Atlas)
+                mongo_audit_log(
                     $newUserId,
+                    'Student Registration',
                     'Student submitted registration for ID: ' . $student_id . ' (' . $email . '). Awaiting Admin approval.'
-                ]);
-
-                // Sync with MongoDB
-                mongo_sync_table('users');
-                mongo_sync_table('announcements');
-                mongo_sync_table('audit_logs');
+                );
 
                 flash('success', 'Registration submitted successfully! Your account is currently PENDING Admin approval. Once approved, you can sign in with your credentials.');
                 redirect(BASE_URL . '/login.php');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $error = 'Registration failed: ' . $e->getMessage();
             }
         }

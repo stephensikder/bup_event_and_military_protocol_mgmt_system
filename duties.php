@@ -1,21 +1,19 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
 $page_title = 'Duties | BUP Protocol';
-
 
 /*
 |--------------------------------------------------------------------------
-| POST ACTIONS
+| POST ACTIONS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
-
 
     /*
     |--------------------------------------------------------------------------
@@ -92,9 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $backup_person = '';
             $status = $assigned_to ? 'Assigned' : 'Pending';
             if ($assigned_to > 0) {
-                $userStaffCheck = $pdo->prepare("SELECT role, level, department FROM users WHERE id = ?");
-                $userStaffCheck->execute([$assigned_to]);
-                $uData = $userStaffCheck->fetch();
+                $uDoc = mcoll('users')->findOne(['id' => $assigned_to]);
+                $uData = $uDoc ? mongo_doc_to_array($uDoc) : null;
                 if (!$uData || ($uData['role'] !== 'Staff / Volunteer' && $uData['level'] !== 'L5') || ($uData['role'] ?? '') === 'Student') {
                     flash('error', 'Supervisors can only assign duties to Staff members.');
                     redirect(BASE_URL . '/duties.php');
@@ -109,10 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $level = 'L5';
             }
             if ($assigned_to > 0) {
-                $userDeptCheck = $pdo->prepare("SELECT department, role, level FROM users WHERE id = ?");
-                $userDeptCheck->execute([$assigned_to]);
-                $uData = $userDeptCheck->fetch();
-                if (!$uData || strcasecmp((string)$uData['department'], $department) !== 0 || ($uData['role'] ?? '') === 'Student') {
+                $uDoc = mcoll('users')->findOne(['id' => $assigned_to]);
+                $uData = $uDoc ? mongo_doc_to_array($uDoc) : null;
+                if (!$uData || strcasecmp((string)($uData['department'] ?? ''), $department) !== 0 || ($uData['role'] ?? '') === 'Student') {
                     flash('error', 'You can only assign personnel within your own department (' . $department . ').');
                     redirect(BASE_URL . '/duties.php');
                 }
@@ -124,66 +120,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/duties.php');
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO duties
-            (
-                event_id,
-                title,
-                department,
-                level,
-                duty_date,
-                start_time,
-                end_time,
-                description,
-                notes,
-                location,
-                time_slot,
-                reports_to,
-                supervisor_id,
-                backup_person,
-                backup_user_id,
-                priority,
-                assigned_to,
-                assigned_by,
-                status,
-                due_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        $stmt->execute([
-            $event_id,
-            $title,
-            $department,
-            $level,
-            $duty_date,
-            $start_time,
-            $end_time,
-            $description,
-            $notes,
-            $location,
-            $time_slot,
-            $reports_to,
-            $supervisor_id,
-            $backup_person,
-            $backup_user_id,
-            $priority,
-            $assigned_to,
-            current_user()['id'],
-            $status,
-            $due_at
+        $duty_id = mongo_next_id('duties');
+        $now = date('Y-m-d H:i:s');
+        mcoll('duties')->insertOne([
+            'id' => $duty_id,
+            'event_id' => $event_id,
+            'title' => $title,
+            'department' => $department,
+            'level' => $level,
+            'duty_date' => $duty_date,
+            'start_time' => $start_time,
+            'end_time' => $end_time,
+            'description' => $description,
+            'notes' => $notes,
+            'location' => $location,
+            'time_slot' => $time_slot,
+            'reports_to' => $reports_to,
+            'supervisor_id' => $supervisor_id,
+            'backup_person' => $backup_person,
+            'backup_user_id' => $backup_user_id,
+            'priority' => $priority,
+            'assigned_to' => $assigned_to,
+            'assigned_by' => (int)current_user()['id'],
+            'status' => $status,
+            'due_at' => $due_at,
+            'created_at' => $now,
+            'updated_at' => $now
         ]);
 
-        $duty_id = $pdo->lastInsertId();
-
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
+        mongo_audit_log(
             'Duty Created',
             'Created duty #' . $duty_id . ' — ' . $title . ' [' . $department . ' ' . $level . ']'
-        ]);
+        );
 
         if (function_exists('notify_duty_assignment')) {
             notify_duty_assignment((int)$duty_id, $title, $department, $level, (int)$assigned_to, (int)current_user()['id']);
@@ -192,7 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Duty created successfully under ' . $department . ' (' . $level . ').');
         redirect(BASE_URL . '/duties.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -216,9 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // If staff, only allow updating status of own duty
         if (is_staff()) {
-            $check = $pdo->prepare("SELECT assigned_to FROM duties WHERE id = ?");
-            $check->execute([$id]);
-            if ((int)$check->fetchColumn() !== (int)current_user()['id']) {
+            $dutyDoc = mcoll('duties')->findOne(['id' => $id]);
+            if (!$dutyDoc || (int)($dutyDoc['assigned_to'] ?? 0) !== (int)current_user()['id']) {
                 flash('error', 'You can only update status for your own assigned duty.');
                 redirect(BASE_URL . '/duties.php');
             }
@@ -227,7 +193,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? $_POST['status']
                 : 'In Progress';
 
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $id]);
+            mcoll('duties')->updateOne(
+                ['id' => $id],
+                ['$set' => ['status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')]]
+            );
+
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($id, $new_status, (int)current_user()['id']);
             }
@@ -262,9 +232,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $due_at = !empty($_POST['due_at']) ? $_POST['due_at'] : null;
 
         if (is_supervisor()) {
-            $checkDept = $pdo->prepare("SELECT department FROM duties WHERE id = ?");
-            $checkDept->execute([$id]);
-            $existingDept = (string)$checkDept->fetchColumn();
+            $dutyDoc = mcoll('duties')->findOne(['id' => $id]);
+            $existingDept = $dutyDoc ? (string)($dutyDoc['department'] ?? '') : '';
             if (strcasecmp($existingDept, current_department()) !== 0) {
                 flash('error', 'Supervisors can only modify duties in their own department.');
                 redirect(BASE_URL . '/duties.php');
@@ -273,18 +242,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $level = 'L5';
             $supervisor_id = (int)current_user()['id'];
             if ($assigned_to > 0) {
-                $userStaffCheck = $pdo->prepare("SELECT role, level, department FROM users WHERE id = ?");
-                $userStaffCheck->execute([$assigned_to]);
-                $uData = $userStaffCheck->fetch();
-                if (!$uData || ($uData['role'] !== 'Staff / Volunteer' && $uData['level'] !== 'L5') || strcasecmp((string)$uData['department'], $department) !== 0) {
+                $uDoc = mcoll('users')->findOne(['id' => $assigned_to]);
+                $uData = $uDoc ? mongo_doc_to_array($uDoc) : null;
+                if (!$uData || ($uData['role'] !== 'Staff / Volunteer' && $uData['level'] !== 'L5') || strcasecmp((string)($uData['department'] ?? ''), $department) !== 0) {
                     flash('error', 'Supervisors can only assign duties to Staff members within their own department (' . $department . ').');
                     redirect(BASE_URL . '/duties.php');
                 }
             }
         } elseif (is_team_lead()) {
-            $checkDept = $pdo->prepare("SELECT department FROM duties WHERE id = ?");
-            $checkDept->execute([$id]);
-            $existingDept = (string)$checkDept->fetchColumn();
+            $dutyDoc = mcoll('duties')->findOne(['id' => $id]);
+            $existingDept = $dutyDoc ? (string)($dutyDoc['department'] ?? '') : '';
             if (strcasecmp($existingDept, current_department()) !== 0) {
                 flash('error', 'Department Leads can only modify duties in their own department.');
                 redirect(BASE_URL . '/duties.php');
@@ -297,62 +264,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/duties.php');
         }
 
-        $stmt = $pdo->prepare("
-            UPDATE duties
-            SET
-                event_id = ?,
-                title = ?,
-                department = ?,
-                level = ?,
-                duty_date = ?,
-                start_time = ?,
-                end_time = ?,
-                description = ?,
-                notes = ?,
-                location = ?,
-                time_slot = ?,
-                reports_to = ?,
-                supervisor_id = ?,
-                backup_person = ?,
-                backup_user_id = ?,
-                priority = ?,
-                assigned_to = ?,
-                status = ?,
-                due_at = ?
-            WHERE id = ?
-        ");
+        mcoll('duties')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'event_id' => $event_id,
+                'title' => $title,
+                'department' => $department,
+                'level' => $level,
+                'duty_date' => $duty_date,
+                'start_time' => $start_time,
+                'end_time' => $end_time,
+                'description' => $description,
+                'notes' => $notes,
+                'location' => $location,
+                'time_slot' => $time_slot,
+                'reports_to' => $reports_to,
+                'supervisor_id' => $supervisor_id,
+                'backup_person' => $backup_person,
+                'backup_user_id' => $backup_user_id,
+                'priority' => $priority,
+                'assigned_to' => $assigned_to,
+                'status' => $status,
+                'due_at' => $due_at,
+                'updated_at' => date('Y-m-d H:i:s')
+            ]]
+        );
 
-        $stmt->execute([
-            $event_id,
-            $title,
-            $department,
-            $level,
-            $duty_date,
-            $start_time,
-            $end_time,
-            $description,
-            $notes,
-            $location,
-            $time_slot,
-            $reports_to,
-            $supervisor_id,
-            $backup_person,
-            $backup_user_id,
-            $priority,
-            $assigned_to,
-            $status,
-            $due_at,
-            $id
-        ]);
-
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
+        mongo_audit_log(
             'Duty Updated',
             'Updated duty #' . $id . ' — ' . $title . ' [' . $status . ']'
-        ]);
+        );
 
         flash('success', 'Duty updated successfully.');
         redirect(BASE_URL . '/duties.php');
@@ -371,25 +312,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($id > 0) {
             if (is_staff()) {
-                $check = $pdo->prepare("SELECT assigned_to FROM duties WHERE id = ?");
-                $check->execute([$id]);
-                if ((int)$check->fetchColumn() !== (int)current_user()['id']) {
+                $dutyDoc = mcoll('duties')->findOne(['id' => $id]);
+                if (!$dutyDoc || (int)($dutyDoc['assigned_to'] ?? 0) !== (int)current_user()['id']) {
                     flash('error', 'You can only update your own assigned duty.');
                     redirect(BASE_URL . '/duties.php');
                 }
             }
 
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $id]);
+            mcoll('duties')->updateOne(
+                ['id' => $id],
+                ['$set' => ['status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')]]
+            );
+
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($id, $new_status, (int)current_user()['id']);
             }
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'], 'Duty Status Changed', 'Set duty #' . $id . ' status to ' . $new_status]);
+
+            mongo_audit_log(
+                'Duty Status Changed',
+                'Set duty #' . $id . ' status to ' . $new_status
+            );
+
             flash('success', 'Duty status set to ' . $new_status . '!');
         }
         redirect(BASE_URL . '/duties.php');
     }
-
 
     /*
     |--------------------------------------------------------------------------
@@ -402,35 +349,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($id > 0) {
+            $dutyDoc = mcoll('duties')->findOne(['id' => $id]);
 
-            $stmt = $pdo->prepare("
-                SELECT title, department
-                FROM duties
-                WHERE id = ?
-            ");
-
-            $stmt->execute([$id]);
-            $duty = $stmt->fetch();
-
-            if ($duty) {
-                if (is_team_lead() && strcasecmp($duty['department'], current_department()) !== 0) {
+            if ($dutyDoc) {
+                $duty = mongo_doc_to_array($dutyDoc);
+                if (is_team_lead() && strcasecmp((string)($duty['department'] ?? ''), current_department()) !== 0) {
                     flash('error', 'Department Leads can only delete duties in their own department.');
                     redirect(BASE_URL . '/duties.php');
                 }
 
-                $pdo->prepare("
-                    DELETE FROM duties
-                    WHERE id = ?
-                ")->execute([$id]);
+                mcoll('duties')->deleteOne(['id' => $id]);
 
-                $pdo->prepare("
-                    INSERT INTO audit_logs(user_id, action, description)
-                    VALUES (?, ?, ?)
-                ")->execute([
-                    current_user()['id'],
+                mongo_audit_log(
                     'Duty Deleted',
-                    'Deleted duty #' . $id . ' — ' . $duty['title']
-                ]);
+                    'Deleted duty #' . $id . ' — ' . ($duty['title'] ?? '')
+                );
 
                 flash('success', 'Duty deleted successfully.');
             }
@@ -457,71 +390,79 @@ $lvl_filter = trim($_GET['lvl'] ?? '');
 
 /*
 |--------------------------------------------------------------------------
-| EVENTS
+| EVENTS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$events = $pdo->query("
-    SELECT id, name
-    FROM events
-    ORDER BY event_date DESC, event_time DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1, 'event_time' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| USERS
+| USERS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 if (is_supervisor()) {
-    $stmtUsers = $pdo->query("
-        SELECT id, name, role, level, department, designation
-        FROM users
-        WHERE status = 'Active' 
-          AND (role = 'Staff / Volunteer' OR level = 'L5')
-          AND role != 'Student'
-        ORDER BY department ASC, name ASC
-    ");
-    $users = $stmtUsers->fetchAll();
+    $uCursor = mcoll('users')->find([
+        'status' => 'Active',
+        'role' => ['$ne' => 'Student'],
+        '$or' => [
+            ['role' => 'Staff / Volunteer'],
+            ['level' => 'L5']
+        ]
+    ], ['sort' => ['department' => 1, 'name' => 1]]);
+    $users = [];
+    foreach ($uCursor as $uDoc) {
+        $users[] = mongo_doc_to_array($uDoc);
+    }
 } elseif (is_team_lead()) {
-    $stmtUsers = $pdo->prepare("
-        SELECT id, name, role, level, department, designation
-        FROM users
-        WHERE status = 'Active' 
-          AND level IN ('L4', 'L5')
-          AND department = ?
-          AND role != 'Student'
-        ORDER BY level ASC, name ASC
-    ");
-    $stmtUsers->execute([current_department()]);
-    $users = $stmtUsers->fetchAll();
+    $uCursor = mcoll('users')->find([
+        'status' => 'Active',
+        'level' => ['$in' => ['L4', 'L5']],
+        'department' => current_department(),
+        'role' => ['$ne' => 'Student']
+    ], ['sort' => ['level' => 1, 'name' => 1]]);
+    $users = [];
+    foreach ($uCursor as $uDoc) {
+        $users[] = mongo_doc_to_array($uDoc);
+    }
 } else {
-    $users = $pdo->query("
-        SELECT id, name, role, level, department, designation
-        FROM users
-        WHERE status = 'Active'
-          AND role != 'Student'
-        ORDER BY level ASC, name ASC
-    ")->fetchAll();
+    $uCursor = mcoll('users')->find([
+        'status' => 'Active',
+        'role' => ['$ne' => 'Student']
+    ], ['sort' => ['level' => 1, 'name' => 1]]);
+    $users = [];
+    foreach ($uCursor as $uDoc) {
+        $users[] = mongo_doc_to_array($uDoc);
+    }
 }
 
-$supervisors_list = $pdo->query("
-    SELECT id, name, designation, department, role, level
-    FROM users
-    WHERE (role IN ('Supervisor', 'Department Lead', 'Event Coordinator', 'Event Director', 'Admin') OR level IN ('L1','L2','L3','L4'))
-      AND status = 'Active'
-      AND role != 'Student'
-    ORDER BY level ASC, name ASC
-")->fetchAll();
+$supCursor = mcoll('users')->find([
+    'status' => 'Active',
+    'role' => ['$ne' => 'Student'],
+    '$or' => [
+        ['role' => ['$in' => ['Supervisor', 'Department Lead', 'Event Coordinator', 'Event Director', 'Admin']]],
+        ['level' => ['$in' => ['L1', 'L2', 'L3', 'L4']]]
+    ]
+], ['sort' => ['level' => 1, 'name' => 1]]);
+$supervisors_list = [];
+foreach ($supCursor as $sDoc) {
+    $supervisors_list[] = mongo_doc_to_array($sDoc);
+}
 
-$backup_users_list = $pdo->query("
-    SELECT id, name, role, department, designation
-    FROM users
-    WHERE status = 'Active'
-      AND role != 'Student'
-    ORDER BY name ASC
-")->fetchAll();
+$bkCursor = mcoll('users')->find([
+    'status' => 'Active',
+    'role' => ['$ne' => 'Student']
+], ['sort' => ['name' => 1]]);
+$backup_users_list = [];
+foreach ($bkCursor as $bDoc) {
+    $backup_users_list[] = mongo_doc_to_array($bDoc);
+}
 
 
 /*
@@ -536,22 +477,15 @@ $edit_duty = null;
 if (is_event_director()) {
     $edit_id = 0;
 } elseif ($edit_id > 0) {
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM duties
-        WHERE id = ?
-    ");
-
-    $stmt->execute([$edit_id]);
-    $edit_duty = $stmt->fetch();
-
-    if (!$edit_duty) {
+    $dutyDoc = mcoll('duties')->findOne(['id' => $edit_id]);
+    if ($dutyDoc) {
+        $edit_duty = mongo_doc_to_array($dutyDoc);
+    } else {
         flash('error', 'Duty not found.');
         redirect(BASE_URL . '/duties.php');
     }
 
-    if (is_team_lead() && strcasecmp($edit_duty['department'], current_department()) !== 0) {
+    if (is_team_lead() && strcasecmp((string)($edit_duty['department'] ?? ''), current_department()) !== 0) {
         flash('error', 'Department Leads can only edit duties within their own department.');
         redirect(BASE_URL . '/duties.php');
     }
@@ -560,130 +494,163 @@ if (is_event_director()) {
 
 /*
 |--------------------------------------------------------------------------
-| DUTY QUERY
+| DUTY QUERY (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$sql = "
-    SELECT
-        d.*,
-        e.name AS event_name,
-        u.name AS assignee,
-        u.role AS assignee_role,
-        u.level AS assignee_level,
-        sup.name AS supervisor_name,
-        bk.name AS backup_user_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u ON u.id = d.assigned_to
-    LEFT JOIN users sup ON sup.id = d.supervisor_id
-    LEFT JOIN users bk ON bk.id = d.backup_user_id
-    WHERE 1
-";
+$pipeline = [];
 
-$params = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'assigned_to',
+        'foreignField' => 'id',
+        'as' => 'assignee_docs'
+    ]
+];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'supervisor_id',
+        'foreignField' => 'id',
+        'as' => 'sup_docs'
+    ]
+];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'backup_user_id',
+        'foreignField' => 'id',
+        'as' => 'bk_docs'
+    ]
+];
+
+$pipeline[] = [
+    '$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'assignee' => ['$ifNull' => [['$arrayElemAt' => ['$assignee_docs.name', 0]], null]],
+        'assignee_role' => ['$ifNull' => [['$arrayElemAt' => ['$assignee_docs.role', 0]], null]],
+        'assignee_level' => ['$ifNull' => [['$arrayElemAt' => ['$assignee_docs.level', 0]], null]],
+        'supervisor_name' => ['$ifNull' => [['$arrayElemAt' => ['$sup_docs.name', 0]], null]],
+        'backup_user_name' => ['$ifNull' => [['$arrayElemAt' => ['$bk_docs.name', 0]], null]],
+        'status_order' => [
+            '$switch' => [
+                'branches' => [
+                    ['case' => ['$eq' => ['$status', 'Ongoing']], 'then' => 1],
+                    ['case' => ['$eq' => ['$status', 'Pending']], 'then' => 2],
+                    ['case' => ['$eq' => ['$status', 'Assigned']], 'then' => 3],
+                    ['case' => ['$eq' => ['$status', 'Completed']], 'then' => 4],
+                ],
+                'default' => 5
+            ]
+        ]
+    ]
+];
+
+$pipeline[] = [
+    '$project' => [
+        'event_docs' => 0,
+        'assignee_docs' => 0,
+        'sup_docs' => 0,
+        'bk_docs' => 0
+    ]
+];
+
+$match = [];
 
 // Role-based hierarchy access restrictions
 if (is_staff()) {
-    $sql .= " AND (d.assigned_to = ? OR (d.level = 'L5' AND (d.department = ? OR d.assigned_to = 0)))";
-    $params[] = current_user()['id'];
-    $params[] = current_department();
+    $match['$or'] = [
+        ['assigned_to' => (int)current_user()['id']],
+        ['$and' => [
+            ['level' => 'L5'],
+            ['$or' => [
+                ['department' => current_department()],
+                ['assigned_to' => 0],
+                ['assigned_to' => null]
+            ]]
+        ]]
+    ];
 } elseif (is_supervisor()) {
-    // Supervisor sees L4 and L5 ground duties to oversee field operations
-    $sql .= " AND d.level IN ('L4', 'L5')";
+    $match['level'] = ['$in' => ['L4', 'L5']];
 } elseif (is_team_lead()) {
-    // Department Lead sees L3, L4, L5 duties within their department
-    $sql .= " AND (d.department = ? OR d.assigned_to = ?) AND d.level IN ('L3', 'L4', 'L5')";
-    $params[] = current_department();
-    $params[] = current_user()['id'];
+    $match['$and'] = [
+        ['$or' => [
+            ['department' => current_department()],
+            ['assigned_to' => (int)current_user()['id']]
+        ]],
+        ['level' => ['$in' => ['L3', 'L4', 'L5']]]
+    ];
 }
-
 
 /* Search */
-
 if ($q !== '') {
-
-    $sql .= "
-        AND (
-            d.title LIKE ?
-            OR d.description LIKE ?
-            OR e.name LIKE ?
-            OR u.name LIKE ?
-        )
-    ";
-
-    $search = "%{$q}%";
-
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $searchCond = [
+        ['title' => $regex],
+        ['description' => $regex],
+        ['event_name' => $regex],
+        ['assignee' => $regex]
+    ];
+    if (isset($match['$and'])) {
+        $match['$and'][] = ['$or' => $searchCond];
+    } elseif (isset($match['$or'])) {
+        $prevOr = $match['$or'];
+        unset($match['$or']);
+        $match['$and'] = [
+            ['$or' => $prevOr],
+            ['$or' => $searchCond]
+        ];
+    } else {
+        $match['$or'] = $searchCond;
+    }
 }
-
-
-/* Event */
 
 if ($event_filter > 0) {
-
-    $sql .= " AND d.event_id = ?";
-    $params[] = $event_filter;
+    $match['event_id'] = $event_filter;
 }
-
-
-/* Status */
 
 if ($status_filter !== '') {
-
-    $sql .= " AND d.status = ?";
-    $params[] = $status_filter;
+    $match['status'] = $status_filter;
 }
-
-
-/* Assignee */
 
 if ($assignee_filter > 0) {
-
-    $sql .= " AND d.assigned_to = ?";
-    $params[] = $assignee_filter;
+    $match['assigned_to'] = $assignee_filter;
 }
 
-/* Department */
 if ($dept_filter !== '') {
-    $sql .= " AND d.department = ?";
-    $params[] = $dept_filter;
+    $match['department'] = $dept_filter;
 }
 
-/* Command Level */
 if ($lvl_filter !== '') {
-    $sql .= " AND d.level = ?";
-    $params[] = $lvl_filter;
+    $match['level'] = $lvl_filter;
 }
 
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
+}
 
-/*
-|--------------------------------------------------------------------------
-| ORDER
-|--------------------------------------------------------------------------
-*/
+$pipeline[] = [
+    '$sort' => [
+        'status_order' => 1,
+        'due_at' => 1,
+        'id' => -1
+    ]
+];
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN d.status = 'Ongoing' THEN 1
-            WHEN d.status = 'Pending' THEN 2
-            WHEN d.status = 'Assigned' THEN 3
-            WHEN d.status = 'Completed' THEN 4
-            ELSE 5
-        END,
-        d.due_at IS NULL,
-        d.due_at ASC
-";
-
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-
-$duties = $stmt->fetchAll();
+$dutiesCursor = mcoll('duties')->aggregate($pipeline);
+$duties = [];
+foreach ($dutiesCursor as $dutyDoc) {
+    $duties[] = mongo_doc_to_array($dutyDoc);
+}
 
 
 /*
@@ -701,19 +668,19 @@ $completed_count = 0;
 
 foreach ($duties as $duty) {
 
-    if ($duty['status'] === 'Pending') {
+    if (($duty['status'] ?? '') === 'Pending') {
         $pending_count++;
     }
 
-    if ($duty['status'] === 'Assigned') {
+    if (($duty['status'] ?? '') === 'Assigned') {
         $assigned_count++;
     }
 
-    if ($duty['status'] === 'Ongoing') {
+    if (($duty['status'] ?? '') === 'Ongoing') {
         $ongoing_count++;
     }
 
-    if ($duty['status'] === 'Completed') {
+    if (($duty['status'] ?? '') === 'Completed') {
         $completed_count++;
     }
 }

@@ -1,15 +1,15 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_once __DIR__ . '/vendor/autoload.php';
 
 require_login();
 
-$pdo = db();
 $page_title = 'Guests & VIP | BUP Protocol';
 
 /*
 |--------------------------------------------------------------------------
-| POST ACTIONS
+| POST ACTIONS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -42,115 +42,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $venue_notes = trim($_POST['venue_notes'] ?? '');
 
         try {
-            $pdo->beginTransaction();
-
-            $stmt = $pdo->prepare("
-                INSERT INTO guests (
-                    event_id,
-                    name,
-                    designation,
-                    organization,
-                    phone,
-                    email,
-                    category,
-                    priority_level,
-                    arrival_status,
-                    assigned_lead_id,
-                    venue_notes
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-
-            $stmt->execute([
-                $event_id,
-                $name,
-                $designation,
-                $organization,
-                $phone,
-                $email,
-                $category,
-                $priority_level,
-                'Expected',
-                $assigned_lead_id,
-                $venue_notes
-            ]);
-
-            $guest_id = (int)$pdo->lastInsertId();
+            $guest_id = mongo_next_id('guests');
+            $now = date('Y-m-d H:i:s');
 
             $characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
             do {
                 $token = '';
-
                 for ($i = 0; $i < 5; $i++) {
-                    $token .= $characters[
-                        random_int(0, strlen($characters) - 1)
-                    ];
+                    $token .= $characters[random_int(0, strlen($characters) - 1)];
                 }
+                $check = mcoll('attendance')->findOne(['qr_token' => $token]);
+            } while ($check !== null);
 
-                $check = $pdo->prepare("
-                    SELECT id
-                    FROM attendance
-                    WHERE qr_token = ?
-                    LIMIT 1
-                ");
-
-                $check->execute([$token]);
-            } while ($check->fetch());
-
-            $stmt = $pdo->prepare("
-                INSERT INTO attendance (
-                    event_id,
-                    guest_id,
-                    qr_token,
-                    status
-                )
-                VALUES (?, ?, ?, 'Registered')
-            ");
-
-            $stmt->execute([
-                $event_id,
-                $guest_id,
-                $token
+            mcoll('guests')->insertOne([
+                'id' => $guest_id,
+                'event_id' => $event_id,
+                'name' => $name,
+                'designation' => $designation,
+                'organization' => $organization,
+                'phone' => $phone,
+                'email' => $email,
+                'category' => $category,
+                'priority_level' => $priority_level,
+                'arrival_status' => 'Expected',
+                'assigned_lead_id' => $assigned_lead_id,
+                'venue_notes' => $venue_notes,
+                'created_at' => $now,
+                'updated_at' => $now
             ]);
 
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
+            $attendance_id = mongo_next_id('attendance');
+            mcoll('attendance')->insertOne([
+                'id' => $attendance_id,
+                'event_id' => $event_id,
+                'guest_id' => $guest_id,
+                'qr_token' => $token,
+                'status' => 'Registered',
+                'check_in_time' => null,
+                'check_out_time' => null,
+                'notes' => null,
+                'created_at' => $now
+            ]);
 
-            $stmt->execute([
-                current_user()['id'],
+            mongo_audit_log(
                 'Guest Added',
                 'Added guest #' . $guest_id . ' — ' . $name
-            ]);
-
-            $pdo->commit();
+            );
 
             // Send the attendance token by email.
             $emailStatus = '';
 
             if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 try {
-                    // Get event name for the email.
-                    $stmt = $pdo->prepare("
-                        SELECT name
-                        FROM events
-                        WHERE id = ?
-                    ");
-                    $stmt->execute([$event_id]);
-                    $event = $stmt->fetch();
-
-                    if (!$event) {
+                    $eventDoc = mcoll('events')->findOne(['id' => $event_id]);
+                    if (!$eventDoc) {
                         throw new RuntimeException('Event not found.');
                     }
+                    $event = mongo_doc_to_array($eventDoc);
 
-                    // Reuse the existing SMTP configuration.
-                    $mailConfig = require __DIR__ . '/config/mail.php';
+                    // Reuse the existing SMTP configuration (Environment or local mail.php)
+                    $mailConfig = get_mail_config();
 
                     $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
 
@@ -179,12 +130,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
 
                     $safeEvent = htmlspecialchars(
-                        $event['name'],
+                        $event['name'] ?? 'Event',
                         ENT_QUOTES,
                         'UTF-8'
                     );
 
-                    $mail->Subject = 'Your Attendance Token - ' . $event['name'];
+                    $mail->Subject = 'Your Attendance Token - ' . ($event['name'] ?? 'Event');
 
                     $mail->Body = '
                         <div style="font-family:Arial,sans-serif;
@@ -232,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $mail->AltBody =
                         "Dear {$name},\n\n" .
-                        "You have been registered for: {$event['name']}.\n" .
+                        "You have been registered for: " . ($event['name'] ?? 'Event') . ".\n" .
                         "Your attendance token is: {$token}\n\n" .
                         "Please present this token at the attendance desk.\n\n" .
                         "BUP Event & Protocol Team";
@@ -241,18 +192,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $emailStatus = 'Attendance token emailed to ' . $email . '.';
 
-                    // Record successful email submission.
-                    $stmt = $pdo->prepare("
-                        INSERT INTO audit_logs (user_id, action, description)
-                        VALUES (?, ?, ?)
-                    ");
-
-                    $stmt->execute([
-                        current_user()['id'],
+                    mongo_audit_log(
                         'Attendance Token Email Sent',
-                        'Attendance token emailed to ' . $email .
-                        ' for guest #' . $guest_id
-                    ]);
+                        'Attendance token emailed to ' . $email . ' for guest #' . $guest_id
+                    );
 
                 } catch (Throwable $mailError) {
                     error_log(
@@ -273,10 +216,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'Guest added successfully. Token: ' . $token . '. ' . $emailStatus
             );
         } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
             error_log('Guest creation failed: ' . $e->getMessage());
 
             flash(
@@ -297,7 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update') {
 
         $id = (int)($_POST['id'] ?? 0);
-
         $event_id = (int)($_POST['event_id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
         $designation = trim($_POST['designation'] ?? '');
@@ -316,46 +254,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/guests.php');
         }
 
-        $stmt = $pdo->prepare("
-            UPDATE guests
-            SET
-                event_id = ?,
-                name = ?,
-                designation = ?,
-                organization = ?,
-                phone = ?,
-                email = ?,
-                category = ?,
-                priority_level = ?,
-                arrival_status = ?,
-                assigned_lead_id = ?,
-                venue_notes = ?
-            WHERE id = ?
-        ");
+        $now = date('Y-m-d H:i:s');
+        mcoll('guests')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'event_id' => $event_id,
+                'name' => $name,
+                'designation' => $designation,
+                'organization' => $organization,
+                'phone' => $phone,
+                'email' => $email,
+                'category' => $category,
+                'priority_level' => $priority_level,
+                'arrival_status' => $arrival_status,
+                'assigned_lead_id' => $assigned_lead_id,
+                'venue_notes' => $venue_notes,
+                'updated_at' => $now
+            ]]
+        );
 
-        $stmt->execute([
-            $event_id,
-            $name,
-            $designation,
-            $organization,
-            $phone,
-            $email,
-            $category,
-            $priority_level,
-            $arrival_status,
-            $assigned_lead_id,
-            $venue_notes,
-            $id
-        ]);
-
-        $pdo->prepare("
-            INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?, ?, ?)
-        ")->execute([
-            current_user()['id'],
+        mongo_audit_log(
             'Guest Updated',
             'Updated guest #' . $id . ' — ' . $name
-        ]);
+        );
 
         flash('success', 'Guest updated successfully.');
         redirect(BASE_URL . '/guests.php');
@@ -372,24 +293,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($id > 0) {
+            $guestDoc = mcoll('guests')->findOne(['id' => $id]);
+            if ($guestDoc) {
+                $guest = mongo_doc_to_array($guestDoc);
+                mcoll('guests')->deleteOne(['id' => $id]);
+                mcoll('attendance')->deleteMany(['guest_id' => $id]);
+                mcoll('seating_assignments')->deleteMany(['guest_id' => $id]);
 
-            $stmt = $pdo->prepare("SELECT name FROM guests WHERE id = ?");
-            $stmt->execute([$id]);
-            $guest = $stmt->fetch();
-
-            if ($guest) {
-
-                $pdo->prepare("DELETE FROM guests WHERE id = ?")
-                    ->execute([$id]);
-
-                $pdo->prepare("
-                    INSERT INTO audit_logs(user_id, action, description)
-                    VALUES (?, ?, ?)
-                ")->execute([
-                    current_user()['id'],
+                mongo_audit_log(
                     'Guest Deleted',
-                    'Deleted guest #' . $id . ' — ' . $guest['name']
-                ]);
+                    'Deleted guest #' . $id . ' — ' . ($guest['name'] ?? '')
+                );
 
                 flash('success', 'Guest deleted successfully.');
             }
@@ -414,23 +328,29 @@ $arrival_filter = $_GET['arrival'] ?? '';
 
 /*
 |--------------------------------------------------------------------------
-| EVENTS
+| EVENTS & VENUE LEADS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$events = $pdo->query("
-    SELECT id, name
-    FROM events
-    ORDER BY event_date DESC, event_time DESC
-")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1, 'event_time' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $events[] = mongo_doc_to_array($eDoc);
+}
 
-$venue_leads = $pdo->query("
-    SELECT id, name, designation, department, role
-    FROM users
-    WHERE (department IN ('Venue','Protocol','Logistics') OR role IN ('Department Lead','Event Coordinator','Admin') OR level IN ('L2','L3'))
-      AND status = 'Active'
-    ORDER BY name
-")->fetchAll();
+$leadFilter = [
+    'status' => 'Active',
+    '$or' => [
+        ['department' => ['$in' => ['Venue', 'Protocol', 'Logistics']]],
+        ['role' => ['$in' => ['Department Lead', 'Event Coordinator', 'Admin']]],
+        ['level' => ['$in' => ['L2', 'L3']]]
+    ]
+];
+$leadCursor = mcoll('users')->find($leadFilter, ['sort' => ['name' => 1]]);
+$venue_leads = [];
+foreach ($leadCursor as $uDoc) {
+    $venue_leads[] = mongo_doc_to_array($uDoc);
+}
 
 
 /*
@@ -443,17 +363,10 @@ $edit_id = (int)($_GET['edit'] ?? 0);
 $edit_guest = null;
 
 if ($edit_id > 0) {
-
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM guests
-        WHERE id = ?
-    ");
-
-    $stmt->execute([$edit_id]);
-    $edit_guest = $stmt->fetch();
-
-    if (!$edit_guest) {
+    $editDoc = mcoll('guests')->findOne(['id' => $edit_id]);
+    if ($editDoc) {
+        $edit_guest = mongo_doc_to_array($editDoc);
+    } else {
         flash('error', 'Guest not found.');
         redirect(BASE_URL . '/guests.php');
     }
@@ -462,103 +375,99 @@ if ($edit_id > 0) {
 
 /*
 |--------------------------------------------------------------------------
-| GUEST QUERY
+| GUEST QUERY (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$sql = "
-    SELECT
-        g.*,
-        e.name AS event_name,
-        e.mode AS event_mode,
-        vl.name AS venue_lead_name,
-        vl.department AS venue_lead_dept
-    FROM guests g
-    LEFT JOIN events e ON e.id = g.event_id
-    LEFT JOIN users vl ON vl.id = g.assigned_lead_id
-    WHERE 1
-";
-
-$params = [];
-
-
-/* Search */
-
+$match = [];
 if ($q !== '') {
-
-    $sql .= "
-        AND (
-            g.name LIKE ?
-            OR g.designation LIKE ?
-            OR g.organization LIKE ?
-            OR g.phone LIKE ?
-            OR g.email LIKE ?
-        )
-    ";
-
-    $search = "%{$q}%";
-
-    $params = [
-        $search,
-        $search,
-        $search,
-        $search,
-        $search
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $match['$or'] = [
+        ['name' => $regex],
+        ['designation' => $regex],
+        ['organization' => $regex],
+        ['phone' => $regex],
+        ['email' => $regex]
     ];
 }
 
-
-/* Event */
-
 if ($event_filter > 0) {
-
-    $sql .= " AND g.event_id = ?";
-    $params[] = $event_filter;
+    $match['event_id'] = $event_filter;
 }
-
-
-/* Category */
 
 if ($category_filter !== '') {
-
-    $sql .= " AND g.category = ?";
-    $params[] = $category_filter;
+    $match['category'] = $category_filter;
 }
-
-
-/* Priority */
 
 if ($priority_filter !== '') {
-
-    $sql .= " AND g.priority_level = ?";
-    $params[] = $priority_filter;
+    $match['priority_level'] = $priority_filter;
 }
-
-
-/* Arrival */
 
 if ($arrival_filter !== '') {
-
-    $sql .= " AND g.arrival_status = ?";
-    $params[] = $arrival_filter;
+    $match['arrival_status'] = $arrival_filter;
 }
 
+$pipeline = [];
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
+}
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN g.priority_level = 'VIP' THEN 1
-            WHEN g.priority_level = 'High' THEN 2
-            WHEN g.priority_level = 'Official' THEN 3
-            ELSE 4
-        END,
-        g.created_at DESC
-";
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'assigned_lead_id',
+        'foreignField' => 'id',
+        'as' => 'lead_docs'
+    ]
+];
 
+$pipeline[] = [
+    '$addFields' => [
+        'event_name' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'event_mode' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.mode', 0]], 'Offline']],
+        'venue_lead_name' => ['$ifNull' => [['$arrayElemAt' => ['$lead_docs.name', 0]], null]],
+        'venue_lead_dept' => ['$ifNull' => [['$arrayElemAt' => ['$lead_docs.department', 0]], null]],
+        'priority_order' => [
+            '$switch' => [
+                'branches' => [
+                    ['case' => ['$eq' => ['$priority_level', 'VIP']], 'then' => 1],
+                    ['case' => ['$eq' => ['$priority_level', 'High']], 'then' => 2],
+                    ['case' => ['$eq' => ['$priority_level', 'Official']], 'then' => 3],
+                ],
+                'default' => 4
+            ]
+        ]
+    ]
+];
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$guests = $stmt->fetchAll();
+$pipeline[] = [
+    '$project' => [
+        'event_docs' => 0,
+        'lead_docs' => 0
+    ]
+];
+
+$pipeline[] = [
+    '$sort' => [
+        'priority_order' => 1,
+        'created_at' => -1,
+        'id' => -1
+    ]
+];
+
+$guestCursor = mcoll('guests')->aggregate($pipeline);
+$guests = [];
+foreach ($guestCursor as $gDoc) {
+    $guests[] = mongo_doc_to_array($gDoc);
+}
 
 
 /*
@@ -575,15 +484,15 @@ $arrived_count = 0;
 
 foreach ($guests as $guest) {
 
-    if ($guest['priority_level'] === 'VIP') {
+    if (($guest['priority_level'] ?? '') === 'VIP') {
         $vip_count++;
     }
 
-    if ($guest['arrival_status'] === 'Expected') {
+    if (($guest['arrival_status'] ?? '') === 'Expected') {
         $expected_count++;
     }
 
-    if ($guest['arrival_status'] === 'Arrived') {
+    if (($guest['arrival_status'] ?? '') === 'Arrived') {
         $arrived_count++;
     }
 }

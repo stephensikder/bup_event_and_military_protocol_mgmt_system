@@ -1,16 +1,15 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 
 require_login();
 
 $page_title = 'Dashboard | BUP Protocol';
 
-$pdo = db();
-
 /*
 |--------------------------------------------------------------------------
-| POST ACTION HANDLERS (Quick Status, Rapid Allocation & Escalation)
+| POST ACTION HANDLERS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -22,12 +21,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_status = trim($_POST['status'] ?? 'Completed');
 
         if ($id > 0) {
-            $pdo->prepare("UPDATE duties SET status = ? WHERE id = ?")->execute([$new_status, $id]);
+            mcoll('duties')->updateOne(['id' => $id], ['$set' => ['status' => $new_status]]);
             if (function_exists('notify_duty_status_change')) {
                 notify_duty_status_change($id, $new_status, (int)current_user()['id']);
             }
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'], 'Duty Status Changed', 'Set duty #' . $id . ' status to ' . $new_status]);
+            mongo_audit_log(
+                current_user()['id'],
+                'Duty Status Changed',
+                'Set duty #' . $id . ' status to ' . $new_status
+            );
             flash('success', 'Duty status set to ' . $new_status . '!');
         }
         redirect(BASE_URL . '/dashboard.php');
@@ -51,18 +53,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($title !== '') {
-            $stmt = $pdo->prepare("
-                INSERT INTO duties (event_id, title, department, level, location, time_slot, reports_to, backup_person, priority, assigned_to, status, assigned_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Assigned', ?)
-            ");
-            $stmt->execute([$event_id, $title, $department, $level, $location, $time_slot, $reports_to, $backup_person, $priority, $assigned_to, current_user()['id']]);
-            $newDutyId = (int)$pdo->lastInsertId();
+            $newDutyId = mongo_next_id('duties');
+            $now = date('Y-m-d H:i:s');
+
+            mcoll('duties')->insertOne([
+                'id' => $newDutyId,
+                'event_id' => $event_id,
+                'title' => $title,
+                'department' => $department,
+                'level' => $level,
+                'location' => $location,
+                'time_slot' => $time_slot,
+                'reports_to' => $reports_to,
+                'backup_person' => $backup_person,
+                'priority' => $priority,
+                'assigned_to' => $assigned_to,
+                'status' => 'Assigned',
+                'assigned_by' => (int)current_user()['id'],
+                'created_at' => $now
+            ]);
+
             if (function_exists('notify_duty_assignment')) {
                 notify_duty_assignment($newDutyId, $title, $department, $level, (int)$assigned_to, (int)current_user()['id']);
             }
 
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([current_user()['id'], 'Duty Allocated', 'Allocated duty: ' . $title . ' in ' . $department]);
+            mongo_audit_log(
+                current_user()['id'],
+                'Duty Allocated',
+                'Allocated duty: ' . $title . ' in ' . $department
+            );
             flash('success', 'Duty "' . $title . '" allocated successfully to ' . $department . '!');
         }
         redirect(BASE_URL . '/dashboard.php');
@@ -75,12 +94,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $severity = trim($_POST['severity'] ?? 'Medium');
 
         if ($incident !== '') {
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([
-                    current_user()['id'],
-                    'FIELD ESCALATION (' . $severity . ')',
-                    'At ' . $location . ': ' . $incident
-                ]);
+            mongo_audit_log(
+                current_user()['id'],
+                'FIELD ESCALATION (' . $severity . ')',
+                'At ' . $location . ': ' . $incident
+            );
             flash('success', 'Field incident escalated to Event Director & Command Desk!');
         }
         redirect(BASE_URL . '/dashboard.php');
@@ -93,15 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $completion_pct = (int)($_POST['completion_pct'] ?? 50);
 
         if ($progress_notes !== '') {
-            $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([
-                    current_user()['id'],
-                    'SUPERVISOR PROGRESS REPORT',
-                    '[' . $progress_dept . ' — ' . $completion_pct . '% Completed]: ' . $progress_notes
-                ]);
+            mongo_audit_log(
+                current_user()['id'],
+                'SUPERVISOR PROGRESS REPORT',
+                '[' . $progress_dept . ' — ' . $completion_pct . '% Completed]: ' . $progress_notes
+            );
 
             if (function_exists('add_user_notification')) {
-                $l2Users = $pdo->query("SELECT id FROM users WHERE role = 'Event Coordinator' OR level = 'L2'")->fetchAll();
+                $l2Users = mcoll('users')->find([
+                    '$or' => [
+                        ['role' => 'Event Coordinator'],
+                        ['level' => 'L2']
+                    ]
+                ]);
                 foreach ($l2Users as $l2u) {
                     add_user_notification(
                         (int)$l2u['id'],
@@ -120,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 /*
 |--------------------------------------------------------------------------
-| Helper
+| Helpers
 |--------------------------------------------------------------------------
 */
 
@@ -168,18 +190,14 @@ if (!function_exists('dashboard_percent')) {
 */
 
 $user = current_user();
-
 $user_name = $user['name'] ?? 'User';
-
 $name_parts = preg_split('/\s+/', trim($user_name));
-
 $initials = '';
 
 foreach ($name_parts as $part) {
     if ($part !== '') {
         $initials .= strtoupper(substr($part, 0, 1));
     }
-
     if (strlen($initials) >= 2) {
         break;
     }
@@ -191,121 +209,128 @@ if ($initials === '') {
 
 /*
 |--------------------------------------------------------------------------
-| Dashboard Statistics
+| Dashboard Statistics (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
 $stats = [
-    'events' => (int) $pdo->query(
-        "SELECT COUNT(*) FROM events"
-    )->fetchColumn(),
-
-    'guests' => (int) $pdo->query(
-        "SELECT COUNT(*) FROM guests"
-    )->fetchColumn(),
-
-    'duties' => (int) $pdo->query(
-        "SELECT COUNT(*)
-         FROM duties
-         WHERE status != 'Completed'"
-    )->fetchColumn(),
-
-    'attendance' => (int) $pdo->query(
-        "SELECT COUNT(*)
-         FROM attendance
-         WHERE status = 'Present'"
-    )->fetchColumn(),
-
-    'pending_approvals' => (int) $pdo->query(
-        "SELECT COUNT(*)
-         FROM events
-         WHERE approval_status IN ('Draft', 'Pending')"
-    )->fetchColumn(),
-
-    'pending_protocol' => (int) $pdo->query(
-        "SELECT COUNT(*)
-         FROM protocol_items
-         WHERE completed = 0"
-    )->fetchColumn(),
-
+    'events' => mcoll('events')->countDocuments(),
+    'guests' => mcoll('guests')->countDocuments(),
+    'duties' => mcoll('duties')->countDocuments(['status' => ['$ne' => 'Completed']]),
+    'attendance' => mcoll('attendance')->countDocuments(['status' => 'Present']),
+    'pending_approvals' => mcoll('events')->countDocuments(['approval_status' => ['$in' => ['Draft', 'Pending']]]),
+    'pending_protocol' => mcoll('protocol_items')->countDocuments(['completed' => ['$in' => [0, false, '0']]]),
     'conflicts' => 0,
 ];
 
 /*
 |--------------------------------------------------------------------------
-| Conflict Detection
-|
-| Definite conflict:
+| Conflict Detection (MongoDB Atlas Aggregation Pipeline)
 | Same date + same venue + same event time
 |--------------------------------------------------------------------------
 */
 
-$conflictQuery = "
-    SELECT COUNT(*)
-    FROM events e1
-    INNER JOIN events e2
-        ON e1.event_date = e2.event_date
-        AND e1.venue = e2.venue
-        AND e1.event_time = e2.event_time
-        AND e1.id < e2.id
-    WHERE e1.status <> 'Cancelled'
-      AND e2.status <> 'Cancelled'
-";
+$conflictPipeline = [
+    [
+        '$match' => [
+            'status' => ['$ne' => 'Cancelled']
+        ]
+    ],
+    [
+        '$group' => [
+            '_id' => [
+                'event_date' => '$event_date',
+                'venue' => '$venue',
+                'event_time' => '$event_time'
+            ],
+            'count' => ['$sum' => 1],
+            'items' => ['$push' => ['id' => '$id', 'name' => '$name']]
+        ]
+    ],
+    [
+        '$match' => [
+            'count' => ['$gt' => 1]
+        ]
+    ]
+];
 
-$stats['conflicts'] = (int) $pdo->query($conflictQuery)->fetchColumn();
+$conflictsCursor = mcoll('events')->aggregate($conflictPipeline);
+$conflicts = [];
+$totalConflicts = 0;
+
+foreach ($conflictsCursor as $cGroup) {
+    $gCount = (int)($cGroup['count'] ?? 0);
+    $totalConflicts += (int)($gCount * ($gCount - 1) / 2);
+    $items = iterator_to_array($cGroup['items']);
+    for ($i = 0; $i < count($items); $i++) {
+        for ($j = $i + 1; $j < count($items); $j++) {
+            if (count($conflicts) < 5) {
+                $conflicts[] = [
+                    'event_one_id' => $items[$i]['id'] ?? 0,
+                    'event_one' => $items[$i]['name'] ?? '',
+                    'event_date' => $cGroup['_id']['event_date'] ?? '',
+                    'event_time' => $cGroup['_id']['event_time'] ?? '',
+                    'venue' => $cGroup['_id']['venue'] ?? '',
+                    'event_two_id' => $items[$j]['id'] ?? 0,
+                    'event_two' => $items[$j]['name'] ?? ''
+                ];
+            }
+        }
+    }
+}
+$stats['conflicts'] = $totalConflicts;
 
 /*
 |--------------------------------------------------------------------------
-| Upcoming Events
+| Upcoming Events (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
+$todayStr = date('Y-m-d');
+$upcomingCursor = mcoll('events')->find([
+    'event_date' => ['$gte' => $todayStr],
+    'status' => ['$ne' => 'Cancelled']
+], [
+    'sort' => ['event_date' => 1, 'event_time' => 1],
+    'limit' => 6
+]);
 
-$upcoming = $pdo->query(
-    "SELECT *
-     FROM events
-     WHERE event_date >= CURDATE()
-       AND status <> 'Cancelled'
-     ORDER BY
-        event_date ASC,
-        event_time ASC
-     LIMIT 6"
-)->fetchAll();
+$upcoming = [];
+foreach ($upcomingCursor as $doc) {
+    $upcoming[] = mongo_doc_to_array($doc);
+}
 
 /*
 |--------------------------------------------------------------------------
-| Ongoing Events
+| Ongoing Events (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
+$ongoingCursor = mcoll('events')->find([
+    'status' => 'Ongoing'
+], [
+    'sort' => ['event_date' => 1, 'event_time' => 1],
+    'limit' => 5
+]);
 
-$ongoing = $pdo->query(
-    "SELECT *
-     FROM events
-     WHERE status = 'Ongoing'
-     ORDER BY event_date, event_time
-     LIMIT 5"
-)->fetchAll();
+$ongoing = [];
+foreach ($ongoingCursor as $doc) {
+    $ongoing[] = mongo_doc_to_array($doc);
+}
 
 /*
 |--------------------------------------------------------------------------
 | Focus Event
-|
-| Priority:
-| 1. Ongoing event
-| 2. Nearest upcoming event
 |--------------------------------------------------------------------------
 */
-
 $focusEvent = null;
-
-if ($ongoing) {
+if (!empty($ongoing)) {
     $focusEvent = $ongoing[0];
-} elseif ($upcoming) {
+} elseif (!empty($upcoming)) {
     $focusEvent = $upcoming[0];
 }
 
 /*
 |--------------------------------------------------------------------------
-| Focus Event Operational Data
+| Focus Event Operational Data (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -320,134 +345,69 @@ $focusAttendance = [
 
 $focusDutyTotal = 0;
 $focusDutyCompleted = 0;
-
 $focusProtocolTotal = 0;
 $focusProtocolCompleted = 0;
-
 $focusGuestTotal = 0;
 
 if ($focusEvent) {
+    $focusEventId = (int)$focusEvent['id'];
 
-    $focusEventId = (int) $focusEvent['id'];
+    /* Duties */
+    $fdCursor = mcoll('duties')->find(['event_id' => $focusEventId]);
+    $rawDuties = [];
+    foreach ($fdCursor as $dDoc) {
+        $rawDuties[] = mongo_doc_to_array($dDoc);
+    }
 
-    /*
-    | Duties
-    */
+    $focusDutyTotal = count($rawDuties);
+    foreach ($rawDuties as $d) {
+        if (($d['status'] ?? '') === 'Completed') {
+            $focusDutyCompleted++;
+        }
+    }
 
-    $stmt = $pdo->prepare(
-        "SELECT *
-         FROM duties
-         WHERE event_id = ?
-         ORDER BY
-            CASE
-                WHEN status = 'Ongoing' THEN 1
-                WHEN status = 'Assigned' THEN 2
-                WHEN status = 'Pending' THEN 3
-                ELSE 4
-            END,
-            due_at ASC
-         LIMIT 8"
-    );
+    usort($rawDuties, function($a, $b) {
+        $getPriority = function($st) {
+            if ($st === 'Ongoing') return 1;
+            if ($st === 'Assigned') return 2;
+            if ($st === 'Pending') return 3;
+            return 4;
+        };
+        $pA = $getPriority($a['status'] ?? '');
+        $pB = $getPriority($b['status'] ?? '');
+        if ($pA !== $pB) return $pA <=> $pB;
+        return strcmp($a['due_at'] ?? '', $b['due_at'] ?? '');
+    });
+    $focusDuties = array_slice($rawDuties, 0, 8);
 
-    $stmt->execute([$focusEventId]);
+    /* Protocol */
+    $fpCursor = mcoll('protocol_items')->find(['event_id' => $focusEventId], ['sort' => ['sort_order' => 1, 'id' => 1]]);
+    $rawProtocol = [];
+    foreach ($fpCursor as $pDoc) {
+        $rawProtocol[] = mongo_doc_to_array($pDoc);
+    }
+    $focusProtocolTotal = count($rawProtocol);
+    foreach ($rawProtocol as $p) {
+        if (!empty($p['completed'])) {
+            $focusProtocolCompleted++;
+        }
+    }
+    $focusProtocol = array_slice($rawProtocol, 0, 8);
 
-    $focusDuties = $stmt->fetchAll();
+    /* Guests */
+    $fgCursor = mcoll('guests')->find(['event_id' => $focusEventId], ['sort' => ['priority_level' => -1, 'name' => 1]]);
+    $rawGuests = [];
+    foreach ($fgCursor as $gDoc) {
+        $rawGuests[] = mongo_doc_to_array($gDoc);
+    }
+    $focusGuestTotal = count($rawGuests);
+    $focusGuests = array_slice($rawGuests, 0, 8);
 
-    $stmt = $pdo->prepare(
-        "SELECT
-            COUNT(*) AS total,
-            SUM(status = 'Completed') AS completed
-         FROM duties
-         WHERE event_id = ?"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $dutySummary = $stmt->fetch();
-
-    $focusDutyTotal = (int) ($dutySummary['total'] ?? 0);
-    $focusDutyCompleted = (int) ($dutySummary['completed'] ?? 0);
-
-    /*
-    | Protocol
-    */
-
-    $stmt = $pdo->prepare(
-        "SELECT *
-         FROM protocol_items
-         WHERE event_id = ?
-         ORDER BY sort_order, id
-         LIMIT 8"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $focusProtocol = $stmt->fetchAll();
-
-    $stmt = $pdo->prepare(
-        "SELECT
-            COUNT(*) AS total,
-            SUM(completed = 1) AS completed
-         FROM protocol_items
-         WHERE event_id = ?"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $protocolSummary = $stmt->fetch();
-
-    $focusProtocolTotal = (int) ($protocolSummary['total'] ?? 0);
-    $focusProtocolCompleted = (int) ($protocolSummary['completed'] ?? 0);
-
-    /*
-    | Guests
-    */
-
-    $stmt = $pdo->prepare(
-        "SELECT *
-         FROM guests
-         WHERE event_id = ?
-         ORDER BY
-            priority_level DESC,
-            name
-         LIMIT 8"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $focusGuests = $stmt->fetchAll();
-
-    $stmt = $pdo->prepare(
-        "SELECT COUNT(*)
-         FROM guests
-         WHERE event_id = ?"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $focusGuestTotal = (int) $stmt->fetchColumn();
-
-    /*
-    | Attendance
-    */
-
-    $stmt = $pdo->prepare(
-        "SELECT
-            COUNT(*) AS registered,
-            SUM(status = 'Present') AS present,
-            SUM(status = 'Absent') AS absent
-         FROM attendance
-         WHERE event_id = ?"
-    );
-
-    $stmt->execute([$focusEventId]);
-
-    $attendanceSummary = $stmt->fetch();
-
+    /* Attendance */
     $focusAttendance = [
-        'registered' => (int) ($attendanceSummary['registered'] ?? 0),
-        'present' => (int) ($attendanceSummary['present'] ?? 0),
-        'absent' => (int) ($attendanceSummary['absent'] ?? 0),
+        'registered' => mcoll('attendance')->countDocuments(['event_id' => $focusEventId]),
+        'present' => mcoll('attendance')->countDocuments(['event_id' => $focusEventId, 'status' => 'Present']),
+        'absent' => mcoll('attendance')->countDocuments(['event_id' => $focusEventId, 'status' => 'Absent']),
     ];
 }
 
@@ -457,16 +417,8 @@ if ($focusEvent) {
 |--------------------------------------------------------------------------
 */
 
-$dutyProgress = dashboard_percent(
-    $focusDutyCompleted,
-    $focusDutyTotal
-);
-
-$protocolProgress = dashboard_percent(
-    $focusProtocolCompleted,
-    $focusProtocolTotal
-);
-
+$dutyProgress = dashboard_percent($focusDutyCompleted, $focusDutyTotal);
+$protocolProgress = dashboard_percent($focusProtocolCompleted, $focusProtocolTotal);
 $overallOperationalProgress = dashboard_percent(
     $focusDutyCompleted + $focusProtocolCompleted,
     $focusDutyTotal + $focusProtocolTotal
@@ -479,13 +431,7 @@ $overallOperationalProgress = dashboard_percent(
 */
 
 $timeline = [];
-
 if ($focusEvent) {
-
-    /*
-    | Event created
-    */
-
     if (!empty($focusEvent['created_at'])) {
         $timeline[] = [
             'title' => 'Event Created',
@@ -495,21 +441,14 @@ if ($focusEvent) {
         ];
     }
 
-    /*
-    | Approval
-    */
-
     if (!empty($focusEvent['approved_at'])) {
-
         $timeline[] = [
             'title' => 'Approval Completed',
             'description' => 'Event approval was recorded.',
             'time' => $focusEvent['approved_at'],
             'class' => 'done',
         ];
-
     } else {
-
         $timeline[] = [
             'title' => 'Approval Pending',
             'description' => 'Event is waiting for approval workflow action.',
@@ -518,38 +457,23 @@ if ($focusEvent) {
         ];
     }
 
-    /*
-    | Event Schedule
-    */
-
     $timeline[] = [
         'title' => 'Event Schedule',
         'description' => $focusEvent['venue'] ?? 'Venue not specified',
-        'time' => ($focusEvent['event_date'] ?? '') . ' · ' .
-            substr(($focusEvent['event_time'] ?? ''), 0, 5),
+        'time' => ($focusEvent['event_date'] ?? '') . ' · ' . substr(($focusEvent['event_time'] ?? ''), 0, 5),
         'class' => 'upcoming',
     ];
 
-    /*
-    | Duty Progress
-    */
-
     $timeline[] = [
         'title' => 'Duty Preparation',
-        'description' => $focusDutyCompleted . ' of ' .
-            $focusDutyTotal . ' duties completed.',
+        'description' => $focusDutyCompleted . ' of ' . $focusDutyTotal . ' duties completed.',
         'time' => $dutyProgress . '%',
         'class' => $dutyProgress >= 100 ? 'done' : 'pending',
     ];
 
-    /*
-    | Protocol Progress
-    */
-
     $timeline[] = [
         'title' => 'Protocol Checklist',
-        'description' => $focusProtocolCompleted . ' of ' .
-            $focusProtocolTotal . ' items completed.',
+        'description' => $focusProtocolCompleted . ' of ' . $focusProtocolTotal . ' items completed.',
         'time' => $protocolProgress . '%',
         'class' => $protocolProgress >= 100 ? 'done' : 'pending',
     ];
@@ -557,66 +481,64 @@ if ($focusEvent) {
 
 /*
 |--------------------------------------------------------------------------
-| Conflict Details
+| Recent Audit Activity (MongoDB Atlas Aggregation Pipeline)
 |--------------------------------------------------------------------------
 */
 
-$conflicts = $pdo->query(
-    "SELECT
-        e1.id AS event_one_id,
-        e1.name AS event_one,
-        e1.event_date,
-        e1.event_time,
-        e1.venue,
-
-        e2.id AS event_two_id,
-        e2.name AS event_two
-     FROM events e1
-     INNER JOIN events e2
-        ON e1.event_date = e2.event_date
-        AND e1.venue = e2.venue
-        AND e1.event_time = e2.event_time
-        AND e1.id < e2.id
-     WHERE e1.status <> 'Cancelled'
-       AND e2.status <> 'Cancelled'
-     ORDER BY e1.event_date, e1.event_time
-     LIMIT 5"
-)->fetchAll();
+$recentPipeline = [
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'user_id',
+            'foreignField' => 'id',
+            'as' => 'user'
+        ]
+    ],
+    ['$unwind' => ['path' => '$user', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['created_at' => -1, 'id' => -1]],
+    ['$limit' => 6]
+];
+$recentCursor = mcoll('audit_logs')->aggregate($recentPipeline);
+$recent = [];
+foreach ($recentCursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['name'] = $row['user']['name'] ?? 'System';
+    unset($row['user']);
+    $recent[] = $row;
+}
 
 /*
 |--------------------------------------------------------------------------
-| Recent Audit Activity
+| Recent / Upcoming Duty Deadlines (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
-$recent = $pdo->query(
-    "SELECT
-        a.*,
-        u.name
-     FROM audit_logs a
-     LEFT JOIN users u
-        ON u.id = a.user_id
-     ORDER BY a.created_at DESC
-     LIMIT 6"
-)->fetchAll();
-
-/*
-|--------------------------------------------------------------------------
-| Recent / Upcoming Duty Deadlines
-|--------------------------------------------------------------------------
-*/
-
-$deadlineDuties = $pdo->query(
-    "SELECT
-        d.*,
-        e.name AS event_name
-     FROM duties d
-     LEFT JOIN events e
-        ON e.id = d.event_id
-     WHERE d.status <> 'Completed'
-     ORDER BY d.due_at ASC
-     LIMIT 5"
-)->fetchAll();
+$deadlinePipeline = [
+    [
+        '$match' => [
+            'status' => ['$ne' => 'Completed']
+        ]
+    ],
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['due_at' => 1]],
+    ['$limit' => 5]
+];
+$deadlineCursor = mcoll('duties')->aggregate($deadlinePipeline);
+$deadlineDuties = [];
+foreach ($deadlineCursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    unset($row['event']);
+    $deadlineDuties[] = $row;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -636,114 +558,296 @@ $deptDutyCounts = [
     'Communication' => ['total' => 0, 'completed' => 0, 'ongoing' => 0, 'label' => 'Media & Information', 'sub' => 'Internal comm, Media, Desk', 'color' => '#155e75', 'bg' => '#cffafe'],
 ];
 
-$stmtDept = $pdo->query("SELECT department, status, COUNT(*) as cnt FROM duties WHERE department IS NOT NULL AND department <> '' GROUP BY department, status");
-while ($row = $stmtDept->fetch()) {
-    $d = $row['department'];
+$deptAgg = mcoll('duties')->aggregate([
+    [
+        '$match' => [
+            'department' => ['$ne' => null, '$ne' => '']
+        ]
+    ],
+    [
+        '$group' => [
+            '_id' => [
+                'department' => '$department',
+                'status' => '$status'
+            ],
+            'cnt' => ['$sum' => 1]
+        ]
+    ]
+]);
+
+foreach ($deptAgg as $grp) {
+    $d = $grp['_id']['department'] ?? '';
+    $st = $grp['_id']['status'] ?? '';
+    $cnt = (int)($grp['cnt'] ?? 0);
     if (isset($deptDutyCounts[$d])) {
-        $deptDutyCounts[$d]['total'] += (int)$row['cnt'];
-        if ($row['status'] === 'Completed') {
-            $deptDutyCounts[$d]['completed'] += (int)$row['cnt'];
-        } elseif ($row['status'] === 'Ongoing') {
-            $deptDutyCounts[$d]['ongoing'] += (int)$row['cnt'];
+        $deptDutyCounts[$d]['total'] += $cnt;
+        if ($st === 'Completed') {
+            $deptDutyCounts[$d]['completed'] += $cnt;
+        } elseif ($st === 'Ongoing') {
+            $deptDutyCounts[$d]['ongoing'] += $cnt;
         }
     }
 }
 
-// User's own assigned duties or Supervisor ground operations
+// User's own assigned duties or Supervisor ground operations (MongoDB Atlas)
 if (is_supervisor()) {
-    $myDutiesStmt = $pdo->prepare("
-        SELECT d.*, e.name AS event_name, u.name AS assignee_name
-        FROM duties d
-        LEFT JOIN events e ON e.id = d.event_id
-        LEFT JOIN users u ON u.id = d.assigned_to
-        WHERE (d.supervisor_id = ? OR d.assigned_by = ? OR d.assigned_to = ? OR d.level IN ('L4', 'L5'))
-        ORDER BY 
-            CASE 
-                WHEN d.status = 'Ongoing' THEN 1 
-                WHEN d.status = 'Assigned' THEN 2 
-                WHEN d.status = 'Pending' THEN 3 
-                ELSE 4 
-            END,
-            d.id DESC
-        LIMIT 10
-    ");
-    $myDutiesStmt->execute([$user_id, $user_id, $user_id]);
-    $myDuties = $myDutiesStmt->fetchAll();
+    $supPipeline = [
+        [
+            '$match' => [
+                '$or' => [
+                    ['supervisor_id' => $user_id],
+                    ['assigned_by' => $user_id],
+                    ['assigned_to' => $user_id],
+                    ['level' => ['$in' => ['L4', 'L5']]]
+                ]
+            ]
+        ],
+        [
+            '$lookup' => [
+                'from' => 'events',
+                'localField' => 'event_id',
+                'foreignField' => 'id',
+                'as' => 'event'
+            ]
+        ],
+        ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+        [
+            '$lookup' => [
+                'from' => 'users',
+                'localField' => 'assigned_to',
+                'foreignField' => 'id',
+                'as' => 'assignee'
+            ]
+        ],
+        ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]]
+    ];
+    $supDutiesCursor = mcoll('duties')->aggregate($supPipeline);
+    $myDuties = [];
+    foreach ($supDutiesCursor as $doc) {
+        $row = mongo_doc_to_array($doc);
+        $row['event_name'] = $row['event']['name'] ?? null;
+        $row['assignee_name'] = $row['assignee']['name'] ?? null;
+        unset($row['event'], $row['assignee']);
+        $myDuties[] = $row;
+    }
+
+    usort($myDuties, function($a, $b) {
+        $getPriority = function($st) {
+            if ($st === 'Ongoing') return 1;
+            if ($st === 'Assigned') return 2;
+            if ($st === 'Pending') return 3;
+            return 4;
+        };
+        $pA = $getPriority($a['status'] ?? '');
+        $pB = $getPriority($b['status'] ?? '');
+        if ($pA !== $pB) return $pA <=> $pB;
+        return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);
+    });
+    $myDuties = array_slice($myDuties, 0, 10);
 } else {
-    $myDutiesStmt = $pdo->prepare("
-        SELECT d.*, e.name AS event_name, u.name AS assignee_name
-        FROM duties d
-        LEFT JOIN events e ON e.id = d.event_id
-        LEFT JOIN users u ON u.id = d.assigned_to
-        WHERE d.assigned_to = ?
-        ORDER BY 
-            CASE 
-                WHEN d.status = 'Ongoing' THEN 1 
-                WHEN d.status = 'Assigned' THEN 2 
-                WHEN d.status = 'Pending' THEN 3 
-                ELSE 4 
-            END,
-            d.due_at ASC
-    ");
-    $myDutiesStmt->execute([$user_id]);
-    $myDuties = $myDutiesStmt->fetchAll();
+    $assignPipeline = [
+        ['$match' => ['assigned_to' => $user_id]],
+        [
+            '$lookup' => [
+                'from' => 'events',
+                'localField' => 'event_id',
+                'foreignField' => 'id',
+                'as' => 'event'
+            ]
+        ],
+        ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+        [
+            '$lookup' => [
+                'from' => 'users',
+                'localField' => 'assigned_to',
+                'foreignField' => 'id',
+                'as' => 'assignee'
+            ]
+        ],
+        ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]]
+    ];
+    $assignCursor = mcoll('duties')->aggregate($assignPipeline);
+    $myDuties = [];
+    foreach ($assignCursor as $doc) {
+        $row = mongo_doc_to_array($doc);
+        $row['event_name'] = $row['event']['name'] ?? null;
+        $row['assignee_name'] = $row['assignee']['name'] ?? null;
+        unset($row['event'], $row['assignee']);
+        $myDuties[] = $row;
+    }
+
+    usort($myDuties, function($a, $b) {
+        $getPriority = function($st) {
+            if ($st === 'Ongoing') return 1;
+            if ($st === 'Assigned') return 2;
+            if ($st === 'Pending') return 3;
+            return 4;
+        };
+        $pA = $getPriority($a['status'] ?? '');
+        $pB = $getPriority($b['status'] ?? '');
+        if ($pA !== $pB) return $pA <=> $pB;
+        return strcmp($a['due_at'] ?? '', $b['due_at'] ?? '');
+    });
 
     if (empty($myDuties) && in_array($active_level, ['L4', 'L5'])) {
-        $previewDutiesStmt = $pdo->prepare("
-            SELECT d.*, e.name AS event_name, u.name AS assignee_name
-            FROM duties d
-            LEFT JOIN events e ON e.id = d.event_id
-            LEFT JOIN users u ON u.id = d.assigned_to
-            WHERE d.level = ?
-            ORDER BY d.due_at ASC LIMIT 6
-        ");
-        $previewDutiesStmt->execute([$active_level]);
-        $myDuties = $previewDutiesStmt->fetchAll();
+        $previewPipeline = [
+            ['$match' => ['level' => $active_level]],
+            [
+                '$lookup' => [
+                    'from' => 'events',
+                    'localField' => 'event_id',
+                    'foreignField' => 'id',
+                    'as' => 'event'
+                ]
+            ],
+            ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+            [
+                '$lookup' => [
+                    'from' => 'users',
+                    'localField' => 'assigned_to',
+                    'foreignField' => 'id',
+                    'as' => 'assignee'
+                ]
+            ],
+            ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]],
+            ['$sort' => ['due_at' => 1]],
+            ['$limit' => 6]
+        ];
+        $previewCursor = mcoll('duties')->aggregate($previewPipeline);
+        foreach ($previewCursor as $pDoc) {
+            $row = mongo_doc_to_array($pDoc);
+            $row['event_name'] = $row['event']['name'] ?? null;
+            $row['assignee_name'] = $row['assignee']['name'] ?? null;
+            unset($row['event'], $row['assignee']);
+            $myDuties[] = $row;
+        }
     }
 }
 
 // Department duties (for L3 & L4)
-$deptDutiesStmt = $pdo->prepare("
-    SELECT d.*, e.name AS event_name, u.name AS assignee_name, u.role AS assignee_role, u.level AS assignee_level
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u ON u.id = d.assigned_to
-    WHERE d.department = ? OR ? = 'General' OR ? = 'Overall Command'
-    ORDER BY 
-        CASE 
-            WHEN d.status = 'Ongoing' THEN 1 
-            WHEN d.status = 'Assigned' THEN 2 
-            WHEN d.status = 'Pending' THEN 3 
-            ELSE 4 
-        END,
-        d.due_at ASC
-");
-$deptDutiesStmt->execute([$user_dept, $user_dept, $user_dept]);
-$deptDuties = $deptDutiesStmt->fetchAll();
+$deptMatchStage = [];
+if ($user_dept !== 'General' && $user_dept !== 'Overall Command') {
+    $deptMatchStage['department'] = $user_dept;
+}
+
+$deptDutiesPipeline = [];
+if (!empty($deptMatchStage)) {
+    $deptDutiesPipeline[] = ['$match' => $deptMatchStage];
+}
+$deptDutiesPipeline = array_merge($deptDutiesPipeline, [
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'assigned_to',
+            'foreignField' => 'id',
+            'as' => 'assignee'
+        ]
+    ],
+    ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]]
+]);
+
+$deptCursor = mcoll('duties')->aggregate($deptDutiesPipeline);
+$deptDuties = [];
+foreach ($deptCursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    $row['assignee_name'] = $row['assignee']['name'] ?? null;
+    $row['assignee_role'] = $row['assignee']['role'] ?? null;
+    $row['assignee_level'] = $row['assignee']['level'] ?? null;
+    unset($row['event'], $row['assignee']);
+    $deptDuties[] = $row;
+}
+
+usort($deptDuties, function($a, $b) {
+    $getPriority = function($st) {
+        if ($st === 'Ongoing') return 1;
+        if ($st === 'Assigned') return 2;
+        if ($st === 'Pending') return 3;
+        return 4;
+    };
+    $pA = $getPriority($a['status'] ?? '');
+    $pB = $getPriority($b['status'] ?? '');
+    if ($pA !== $pB) return $pA <=> $pB;
+    return strcmp($a['due_at'] ?? '', $b['due_at'] ?? '');
+});
 
 // Full cross-department duty alignment list for L2 Event Coordinator (Requirement 6)
-$l2AlignmentDuties = $pdo->query("
-    SELECT d.*, 
-           COALESCE(e.name, 'BUP Annual Protocol Ceremony') AS event_name,
-           u_staff.name AS staff_name,
-           u_staff.level AS staff_level,
-           u_sup.name AS supervisor_name,
-           u_lead.name AS lead_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u_staff ON u_staff.id = d.assigned_to
-    LEFT JOIN users u_sup ON u_sup.id = d.supervisor_id
-    LEFT JOIN users u_lead ON u_lead.department = d.department AND (u_lead.role = 'Department Lead' OR u_lead.level = 'L3')
-    ORDER BY d.duty_date DESC, d.start_time ASC, d.id DESC
-")->fetchAll();
+$l2Pipeline = [
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'assigned_to',
+            'foreignField' => 'id',
+            'as' => 'u_staff'
+        ]
+    ],
+    ['$unwind' => ['path' => '$u_staff', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'supervisor_id',
+            'foreignField' => 'id',
+            'as' => 'u_sup'
+        ]
+    ],
+    ['$unwind' => ['path' => '$u_sup', 'preserveNullAndEmptyArrays' => true]],
+    ['$sort' => ['duty_date' => -1, 'start_time' => 1, 'id' => -1]]
+];
+
+$l2Cursor = mcoll('duties')->aggregate($l2Pipeline);
+$l2AlignmentDuties = [];
+
+// Preload leads by department
+$deptLeads = [];
+$leadsCursor = mcoll('users')->find([
+    '$or' => [
+        ['role' => 'Department Lead'],
+        ['level' => 'L3']
+    ]
+]);
+foreach ($leadsCursor as $lDoc) {
+    $ld = mongo_doc_to_array($lDoc);
+    $d = $ld['department'] ?? '';
+    if ($d && !isset($deptLeads[$d])) {
+        $deptLeads[$d] = $ld['name'] ?? null;
+    }
+}
+
+foreach ($l2Cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? 'BUP Annual Protocol Ceremony';
+    $row['staff_name'] = $row['u_staff']['name'] ?? null;
+    $row['staff_level'] = $row['u_staff']['level'] ?? null;
+    $row['supervisor_name'] = $row['u_sup']['name'] ?? null;
+    $row['lead_name'] = $deptLeads[$row['department'] ?? ''] ?? null;
+    unset($row['event'], $row['u_staff'], $row['u_sup']);
+    $l2AlignmentDuties[] = $row;
+}
 
 // Users in this department & active users
-$allActiveUsers = $pdo->query("
-    SELECT id, name, role, level, department, designation, phone
-    FROM users
-    WHERE status = 'Active'
-    ORDER BY level ASC, name ASC
-")->fetchAll();
+$activeUserDocs = mcoll('users')->find(['status' => 'Active'], ['sort' => ['level' => 1, 'name' => 1]]);
+$allActiveUsers = [];
+foreach ($activeUserDocs as $uDoc) {
+    $allActiveUsers[] = mongo_doc_to_array($uDoc);
+}
 
 $deptAssignees = [];
 $deptSupervisors = [];
@@ -769,18 +873,57 @@ foreach ($allActiveUsers as $au) {
 }
 
 // Events dropdown
-$eventsDropdown = $pdo->query("SELECT id, name FROM events ORDER BY event_date ASC")->fetchAll();
+$evDropDocs = mcoll('events')->find([], ['sort' => ['event_date' => 1]]);
+$eventsDropdown = [];
+foreach ($evDropDocs as $ed) {
+    $eventsDropdown[] = mongo_doc_to_array($ed);
+}
 
 // Urgent/High priority duties
-$urgentDuties = $pdo->query("
-    SELECT d.*, e.name AS event_name, u.name AS assignee_name
-    FROM duties d
-    LEFT JOIN events e ON e.id = d.event_id
-    LEFT JOIN users u ON u.id = d.assigned_to
-    WHERE (d.priority = 'Urgent' OR d.priority = 'High') AND d.status <> 'Completed'
-    ORDER BY d.priority = 'Urgent' DESC, d.due_at ASC
-    LIMIT 6
-")->fetchAll();
+$urgentPipeline = [
+    [
+        '$match' => [
+            'priority' => ['$in' => ['Urgent', 'High']],
+            'status' => ['$ne' => 'Completed']
+        ]
+    ],
+    [
+        '$lookup' => [
+            'from' => 'events',
+            'localField' => 'event_id',
+            'foreignField' => 'id',
+            'as' => 'event'
+        ]
+    ],
+    ['$unwind' => ['path' => '$event', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'assigned_to',
+            'foreignField' => 'id',
+            'as' => 'assignee'
+        ]
+    ],
+    ['$unwind' => ['path' => '$assignee', 'preserveNullAndEmptyArrays' => true]]
+];
+
+$urgentCursor = mcoll('duties')->aggregate($urgentPipeline);
+$urgentDuties = [];
+foreach ($urgentCursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['event_name'] = $row['event']['name'] ?? null;
+    $row['assignee_name'] = $row['assignee']['name'] ?? null;
+    unset($row['event'], $row['assignee']);
+    $urgentDuties[] = $row;
+}
+
+usort($urgentDuties, function($a, $b) {
+    $pA = ($a['priority'] ?? '') === 'Urgent' ? 1 : 2;
+    $pB = ($b['priority'] ?? '') === 'Urgent' ? 1 : 2;
+    if ($pA !== $pB) return $pA <=> $pB;
+    return strcmp($a['due_at'] ?? '', $b['due_at'] ?? '');
+});
+$urgentDuties = array_slice($urgentDuties, 0, 6);
 
 require __DIR__ . '/includes/header.php';
 

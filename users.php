@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 if (!can_create_accounts() && !is_event_director() && !has_role('Admin')) {
@@ -8,19 +9,14 @@ if (!can_create_accounts() && !is_event_director() && !has_role('Admin')) {
     redirect(BASE_URL . '/dashboard.php');
 }
 
-$pdo = db();
-
 $page_title = 'User Management | BUP Protocol';
-
 $currentUserId = (int)current_user()['id'];
 
-
 // =====================================================
-// HANDLE USER CREATION & STATUS UPDATE
+// HANDLE USER CREATION & STATUS UPDATE (MongoDB Atlas)
 // =====================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $action = $_POST['action'] ?? '';
 
     // =================================================
@@ -61,10 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/users.php');
         }
 
-        // Email uniqueness check
-        $check = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
-        $check->execute([$email]);
-        if ($check->fetch()) {
+        // Email uniqueness check (MongoDB Atlas)
+        $exists = mcoll('users')->findOne(['email' => $email]);
+        if ($exists) {
             flash('error', 'An account with email ' . $email . ' already exists.');
             redirect(BASE_URL . '/users.php');
         }
@@ -104,186 +99,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $pdo->prepare("
-            INSERT INTO users (name, email, password, role, level, department, designation, phone, status, reports_to_id, backup_person_id, protocol_level, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([
-            $name, $email, $hash, $role, $level, $department, $designation, $phone, $reports_to_id, $backup_person_id, $protocol_level
-        ]);
-        $newUserId = (int)$pdo->lastInsertId();
+        $newUserId = mongo_next_id('users');
+        $now = date('Y-m-d H:i:s');
 
-        $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-            ->execute([current_user()['id'], 'User Created', 'Created account for ' . $name . ' (' . $email . ') as ' . $role . ' [' . $level . ']']);
+        mcoll('users')->insertOne([
+            'id' => $newUserId,
+            'name' => $name,
+            'email' => $email,
+            'password' => $hash,
+            'password_hash' => $hash,
+            'role' => $role,
+            'level' => $level,
+            'department' => $department,
+            'designation' => $designation,
+            'phone' => $phone,
+            'status' => 'Active',
+            'reports_to_id' => $reports_to_id,
+            'backup_person_id' => $backup_person_id,
+            'protocol_level' => $protocol_level,
+            'failed_attempts' => 0,
+            'last_login' => null,
+            'created_at' => $now
+        ]);
+
+        mongo_audit_log(
+            current_user()['id'],
+            'User Created',
+            'Created account for ' . $name . ' (' . $email . ') as ' . $role . ' [' . $level . ']'
+        );
 
         flash('success', 'User account created successfully for <strong>' . e($name) . '</strong> (' . e($role) . ' - ' . e($level) . ').');
-        mongo_sync_table('users');
         redirect(BASE_URL . '/users.php');
     }
 
+    // =================================================
+    // ACCOUNT STATUS UPDATE (Active / Inactive)
+    // =================================================
     if ($action === 'status') {
-
         $id = (int)($_POST['id'] ?? 0);
-
-        $requestedStatus =
-            ($_POST['status'] ?? '') === 'Active'
-                ? 'Active'
-                : 'Inactive';
-
-
-        // Prevent invalid user ID
+        $requestedStatus = ($_POST['status'] ?? '') === 'Active' ? 'Active' : 'Inactive';
 
         if (!$id) {
-
-            flash(
-                'error',
-                'Invalid user account.'
-            );
-
-            redirect(
-                BASE_URL . '/users.php'
-            );
+            flash('error', 'Invalid user account.');
+            redirect(BASE_URL . '/users.php');
         }
-
-
-        // Prevent admin from disabling own account
 
         if ($id === $currentUserId && $requestedStatus === 'Inactive') {
-
-            flash(
-                'error',
-                'You cannot deactivate your own account.'
-            );
-
-            redirect(
-                BASE_URL . '/users.php'
-            );
+            flash('error', 'You cannot deactivate your own account.');
+            redirect(BASE_URL . '/users.php');
         }
 
-
-        // Find target user
-
-        $stmt = $pdo->prepare("
-            SELECT id, name, email, status
-            FROM users
-            WHERE id = ?
-        ");
-
-        $stmt->execute([$id]);
-
-        $targetUser = $stmt->fetch();
-
-
-        if (!$targetUser) {
-
-            flash(
-                'error',
-                'User account not found.'
-            );
-
-            redirect(
-                BASE_URL . '/users.php'
-            );
+        $targetUserDoc = mcoll('users')->findOne(['id' => $id]);
+        if (!$targetUserDoc) {
+            flash('error', 'User account not found.');
+            redirect(BASE_URL . '/users.php');
         }
 
+        $targetUser = mongo_doc_to_array($targetUserDoc);
 
-        // No unnecessary update
-
-        if ($targetUser['status'] === $requestedStatus) {
-
-            flash(
-                'success',
-                'Account is already ' .
-                strtolower($requestedStatus) .
-                '.'
-            );
-
-            redirect(
-                BASE_URL . '/users.php'
-            );
+        if (($targetUser['status'] ?? '') === $requestedStatus) {
+            flash('success', 'Account is already ' . strtolower($requestedStatus) . '.');
+            redirect(BASE_URL . '/users.php');
         }
-
 
         try {
+            mcoll('users')->updateOne(['id' => $id], ['$set' => ['status' => $requestedStatus]]);
 
-            $pdo->beginTransaction();
+            $actionText = $requestedStatus === 'Active' ? 'User Activated' : 'User Deactivated';
+            $description = 'User "' . ($targetUser['name'] ?? '') . '" (' . ($targetUser['email'] ?? '') . ') was ' . strtolower($requestedStatus) . '.';
 
-
-            // Update account status
-
-            $stmt = $pdo->prepare("
-                UPDATE users
-                SET status = ?
-                WHERE id = ?
-            ");
-
-            $stmt->execute([
-                $requestedStatus,
-                $id
-            ]);
-
-
-            // Audit log
-
-            $stmt = $pdo->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description
-                )
-                VALUES (?, ?, ?)
-            ");
-
-            $actionText =
-                $requestedStatus === 'Active'
-                    ? 'User Activated'
-                    : 'User Deactivated';
-
-
-            $description =
-                'User "' .
-                $targetUser['name'] .
-                '" (' .
-                $targetUser['email'] .
-                ') was ' .
-                strtolower($requestedStatus) .
-                '.';
-
-
-            $stmt->execute([
-                $currentUserId,
-                $actionText,
-                $description
-            ]);
-
-
-            $pdo->commit();
-
-
-            flash(
-                'success',
-                'Account status updated successfully.'
-            );
-
+            mongo_audit_log($currentUserId, $actionText, $description);
+            flash('success', 'Account status updated successfully.');
         } catch (Throwable $e) {
-
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            flash(
-                'error',
-                'Unable to update account status.'
-            );
+            flash('error', 'Unable to update account status.');
         }
 
-
-        redirect(
-            BASE_URL . '/users.php'
-        );
+        redirect(BASE_URL . '/users.php');
     }
 
+    // =================================================
+    // APPROVE / REJECT STUDENT REGISTRATIONS
+    // =================================================
     if ($action === 'approve_registration' || $action === 'reject_registration') {
         if (!is_event_director() && !has_role('Admin')) {
             flash('error', 'Only System Administrator or Event Director can approve registrations.');
@@ -293,31 +189,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $newStatus = ($action === 'approve_registration') ? 'Active' : 'Rejected';
 
-        $uStmt = $pdo->prepare("SELECT * FROM users WHERE id = ? LIMIT 1");
-        $uStmt->execute([$id]);
-        $target = $uStmt->fetch();
+        $targetDoc = mcoll('users')->findOne(['id' => $id]);
+        if ($targetDoc) {
+            $target = mongo_doc_to_array($targetDoc);
+            mcoll('users')->updateOne(
+                ['id' => $id],
+                ['$set' => ['status' => $newStatus, 'failed_attempts' => 0]]
+            );
 
-        if ($target) {
-            $pdo->prepare("UPDATE users SET status = ?, failed_attempts = 0 WHERE id = ?")->execute([$newStatus, $id]);
+            mongo_audit_log(
+                $currentUserId,
+                $action === 'approve_registration' ? 'Registration Approved' : 'Registration Rejected',
+                'Administrator ' . ($action === 'approve_registration' ? 'approved' : 'rejected') . ' student registration for ' . ($target['name'] ?? '') . ' (' . ($target['email'] ?? '') . ')'
+            );
 
-            $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, ?, ?)")
-                ->execute([
-                    $currentUserId,
-                    $action === 'approve_registration' ? 'Registration Approved' : 'Registration Rejected',
-                    'Administrator ' . ($action === 'approve_registration' ? 'approved' : 'rejected') . ' student registration for ' . $target['name'] . ' (' . $target['email'] . ')'
-                ]);
-
-            $notifTitle = $action === 'approve_registration' ? 'Registration Approved: ' . $target['name'] : 'Registration Rejected: ' . $target['name'];
+            $notifTitle = $action === 'approve_registration' ? 'Registration Approved: ' . ($target['name'] ?? '') : 'Registration Rejected: ' . ($target['name'] ?? '');
             $notifMsg = $action === 'approve_registration'
-                ? 'Student account for ' . $target['name'] . ' (' . $target['email'] . ') has been APPROVED. The student may now sign in.'
-                : 'Student account registration for ' . $target['name'] . ' was REJECTED by Administrator.';
-            $pdo->prepare("INSERT INTO announcements (title, message, created_by) VALUES (?, ?, ?)")
-                ->execute([$notifTitle, $notifMsg, $currentUserId]);
+                ? 'Student account for ' . ($target['name'] ?? '') . ' (' . ($target['email'] ?? '') . ') has been APPROVED. The student may now sign in.'
+                : 'Student account registration for ' . ($target['name'] ?? '') . ' was REJECTED by Administrator.';
 
-            flash('success', $action === 'approve_registration' ? 'Account for <strong>' . e($target['name']) . '</strong> approved and activated successfully!' : 'Account registration rejected.');
-            mongo_sync_table('users');
-            mongo_sync_table('announcements');
-            mongo_sync_table('audit_logs');
+            $annId = mongo_next_id('announcements');
+            mcoll('announcements')->insertOne([
+                'id' => $annId,
+                'title' => $notifTitle,
+                'message' => $notifMsg,
+                'created_by' => $currentUserId,
+                'created_at' => date('Y-m-d H:i:s')
+            ]);
+
+            flash('success', $action === 'approve_registration' ? 'Account for <strong>' . e($target['name'] ?? '') . '</strong> approved and activated successfully!' : 'Account registration rejected.');
         } else {
             flash('error', 'User account not found.');
         }
@@ -326,179 +226,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-
 // =====================================================
 // SEARCH / FILTER
 // =====================================================
-
 $search = trim($_GET['q'] ?? '');
-
-$roleFilter = trim(
-    $_GET['role'] ?? ''
-);
-
-$statusFilter = trim(
-    $_GET['status'] ?? ''
-);
-
+$roleFilter = trim($_GET['role'] ?? '');
+$statusFilter = trim($_GET['status'] ?? '');
 
 // =====================================================
-// STATISTICS
+// STATISTICS (MongoDB Atlas)
 // =====================================================
+$totalUsers = mcoll('users')->countDocuments();
+$activeUsers = mcoll('users')->countDocuments(['status' => 'Active']);
+$inactiveUsers = mcoll('users')->countDocuments(['status' => 'Inactive']);
+$pendingUsersCount = mcoll('users')->countDocuments(['status' => 'Pending']);
 
-$totalUsers = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM users
-")->fetchColumn();
+$pendingRegistrationsCursor = mcoll('users')->find(['status' => 'Pending'], ['sort' => ['id' => -1]]);
+$pendingRegistrations = [];
+foreach ($pendingRegistrationsCursor as $pDoc) {
+    $pendingRegistrations[] = mongo_doc_to_array($pDoc);
+}
 
+$lockedUsers = mcoll('users')->countDocuments(['failed_attempts' => ['$gte' => 5]]);
 
-$activeUsers = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM users
-    WHERE status = 'Active'
-")->fetchColumn();
-
-
-$inactiveUsers = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM users
-    WHERE status = 'Inactive'
-")->fetchColumn();
-
-$pendingUsersCount = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM users
-    WHERE status = 'Pending'
-")->fetchColumn();
-
-$pendingRegistrations = $pdo->query("
-    SELECT *
-    FROM users
-    WHERE status = 'Pending'
-    ORDER BY id DESC
-")->fetchAll();
-
-
-$lockedUsers = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM users
-    WHERE failed_attempts >= 5
-")->fetchColumn();
-
-
-$roleCount = (int)$pdo->query("
-    SELECT COUNT(DISTINCT role)
-    FROM users
-")->fetchColumn();
-
-
-// =====================================================
-// ROLES
-// =====================================================
-
-$roles = $pdo->query("
-    SELECT DISTINCT role
-    FROM users
-    WHERE role IS NOT NULL
-      AND role <> ''
-    ORDER BY role
-")->fetchAll(PDO::FETCH_COLUMN);
-
-
-// =====================================================
-// USER QUERY
-// =====================================================
-
-$sql = "
-    SELECT
-        u.id,
-        u.name,
-        u.email,
-        u.role,
-        u.level,
-        u.department,
-        u.designation,
-        u.phone,
-        u.status,
-        u.failed_attempts,
-        u.last_login,
-        u.created_at,
-        u.protocol_level,
-        rt.name AS reports_to_name,
-        bp.name AS backup_person_name
-    FROM users u
-    LEFT JOIN users rt ON rt.id = u.reports_to_id
-    LEFT JOIN users bp ON bp.id = u.backup_person_id
-    WHERE 1 = 1
-";
+$rawRoles = mcoll('users')->distinct('role', [
+    'role' => ['$ne' => null, '$ne' => '', '$exists' => true]
+]);
+sort($rawRoles);
+$roles = $rawRoles;
+$roleCount = count($roles);
 
 // Eligible users for Reports To and Backup Person dropdowns
-$eligible_users = $pdo->query("
-    SELECT id, name, role, level, department, designation
-    FROM users
-    WHERE status = 'Active'
-    ORDER BY level ASC, name ASC
-")->fetchAll();
+$eligibleDocs = mcoll('users')->find(
+    ['status' => 'Active'],
+    ['sort' => ['level' => 1, 'name' => 1]]
+);
+$eligible_users = [];
+foreach ($eligibleDocs as $eDoc) {
+    $eligible_users[] = mongo_doc_to_array($eDoc);
+}
 
-$params = [];
+// =====================================================
+// USER QUERY (MongoDB Atlas Aggregation Pipeline)
+// =====================================================
+$matchStage = [];
 
 if ($search !== '') {
-    $sql .= "
-        AND (
-            u.name LIKE ?
-            OR u.email LIKE ?
-            OR u.designation LIKE ?
-            OR u.phone LIKE ?
-        )
-    ";
-
-    $like = '%' . $search . '%';
-
-    $params[] = $like;
-    $params[] = $like;
-    $params[] = $like;
-    $params[] = $like;
+    $searchRegex = new MongoDB\BSON\Regex(preg_quote($search, '/'), 'i');
+    $matchStage['$or'] = [
+        ['name' => $searchRegex],
+        ['email' => $searchRegex],
+        ['designation' => $searchRegex],
+        ['phone' => $searchRegex]
+    ];
 }
 
 if ($roleFilter !== '') {
-    $sql .= "
-        AND u.role = ?
-    ";
-
-    $params[] = $roleFilter;
+    $matchStage['role'] = $roleFilter;
 }
 
-if (
-    $statusFilter === 'Active' ||
-    $statusFilter === 'Inactive'
-) {
-    $sql .= "
-        AND u.status = ?
-    ";
-
-    $params[] = $statusFilter;
+if ($statusFilter === 'Active' || $statusFilter === 'Inactive') {
+    $matchStage['status'] = $statusFilter;
 }
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN u.status = 'Active' THEN 1
-            ELSE 2
-        END,
-        u.name ASC
-";
+$pipeline = [
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'reports_to_id',
+            'foreignField' => 'id',
+            'as' => 'rt'
+        ]
+    ],
+    ['$unwind' => ['path' => '$rt', 'preserveNullAndEmptyArrays' => true]],
+    [
+        '$lookup' => [
+            'from' => 'users',
+            'localField' => 'backup_person_id',
+            'foreignField' => 'id',
+            'as' => 'bp'
+        ]
+    ],
+    ['$unwind' => ['path' => '$bp', 'preserveNullAndEmptyArrays' => true]]
+];
 
+if (!empty($matchStage)) {
+    $pipeline[] = ['$match' => $matchStage];
+}
 
-$stmt = $pdo->prepare($sql);
+$cursor = mcoll('users')->aggregate($pipeline);
+$users = [];
+foreach ($cursor as $doc) {
+    $row = mongo_doc_to_array($doc);
+    $row['reports_to_name'] = $row['rt']['name'] ?? null;
+    $row['backup_person_name'] = $row['bp']['name'] ?? null;
+    unset($row['rt'], $row['bp']);
+    $users[] = $row;
+}
 
-$stmt->execute($params);
-
-$users = $stmt->fetchAll();
-
-
-// =====================================================
-// HEADER
-// =====================================================
+// Sort matching SQL ORDER BY: Active first, then name ASC
+usort($users, function($a, $b) {
+    $stA = ($a['status'] ?? '') === 'Active' ? 1 : 2;
+    $stB = ($b['status'] ?? '') === 'Active' ? 1 : 2;
+    if ($stA !== $stB) return $stA <=> $stB;
+    return strcasecmp($a['name'] ?? '', $b['name'] ?? '');
+});
 
 require __DIR__ . '/includes/header.php';
 

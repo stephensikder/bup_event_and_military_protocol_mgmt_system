@@ -1,9 +1,9 @@
 
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
-$pdo = db();
 $page_title = 'Event Calendar | BUP Protocol';
 
 /* =========================================================
@@ -85,52 +85,42 @@ if (
 }
 
 /* =========================================================
-   FETCH EVENTS
+   FETCH EVENTS (MongoDB Atlas)
 ========================================================= */
 
-$sql = "
-    SELECT
-        id,
-        name,
-        event_type,
-        event_date,
-        event_time,
-        venue,
-        status,
-        priority
-    FROM events
-    WHERE event_date >= ?
-    AND event_date < ?
-";
+$startDate = date('Y-m-d', $month_timestamp);
+$endDate = date('Y-m-d', strtotime('+1 month', $month_timestamp));
 
-$params = [
-    date('Y-m-d', $month_timestamp),
-    date(
-        'Y-m-d',
-        strtotime('+1 month', $month_timestamp)
-    )
+$filter = [
+    'event_date' => [
+        '$gte' => $startDate,
+        '$lt' => $endDate
+    ]
 ];
 
 if ($status_filter !== '') {
-    $sql .= " AND status = ?";
-    $params[] = $status_filter;
+    $filter['status'] = $status_filter;
 }
 
 if ($type_filter !== '') {
-    $sql .= " AND event_type = ?";
-    $params[] = $type_filter;
+    $filter['event_type'] = $type_filter;
 }
 
-$sql .= "
-    ORDER BY
-        event_date ASC,
-        event_time ASC,
-        name ASC
-";
+$eventsCursor = mcoll('events')->find($filter, [
+    'sort' => ['event_date' => 1, 'event_time' => 1, 'name' => 1],
+    'projection' => [
+        'id' => 1,
+        'name' => 1,
+        'event_type' => 1,
+        'event_date' => 1,
+        'event_time' => 1,
+        'venue' => 1,
+        'status' => 1,
+        'priority' => 1
+    ]
+]);
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$events = $stmt->fetchAll();
+$events = array_values(array_map('mongo_doc_to_array', iterator_to_array($eventsCursor)));
 
 /* =========================================================
    GROUP EVENTS BY DATE

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 // Access control: Communication Lead, Coordinator, Director, Admin
@@ -8,7 +9,6 @@ if (!is_communication_lead() && !is_event_coordinator() && !is_event_director() 
     redirect(BASE_URL . '/dashboard.php');
 }
 
-$pdo = db();
 $page_title = 'Media & Documentation | BUP Protocol';
 
 // Ensure uploads/media directory exists
@@ -17,7 +17,7 @@ if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }
 
-// Handle POST actions
+// Handle POST actions (MongoDB Atlas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -67,18 +67,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO media_documents 
-            (event_id, title, category, description, file_path, file_type, file_size, responsible_staff_id, approval_status, media_task, documentation_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $event_id, $title, $category, $description, $filePath, $fileType, $fileSize,
-            $responsible_staff_id, $approval_status, $media_task, $documentation_status
+        $newId = mongo_next_id('media_documents');
+        mcoll('media_documents')->insertOne([
+            'id' => $newId,
+            'event_id' => $event_id,
+            'title' => $title,
+            'category' => $category,
+            'description' => $description,
+            'file_path' => $filePath,
+            'file_type' => $fileType,
+            'file_size' => $fileSize,
+            'responsible_staff_id' => $responsible_staff_id,
+            'approval_status' => $approval_status,
+            'media_task' => $media_task,
+            'documentation_status' => $documentation_status,
+            'created_at' => date('Y-m-d H:i:s')
         ]);
 
-        $pdo->prepare("INSERT INTO audit_logs (user_id, action, description) VALUES (?, 'Media Document Created', ?)")
-            ->execute([current_user()['id'], 'Created media/doc record: "' . $title . '" (' . $category . ')']);
+        mongo_audit_log('Media Document Created', 'Created media/doc record: "' . $title . '" (' . $category . ')');
 
         flash('success', 'Media & Documentation record <strong>' . e($title) . '</strong> created successfully.');
         redirect(BASE_URL . '/media_docs.php');
@@ -90,11 +96,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $approval_status = $_POST['approval_status'] ?? 'Approved';
         $documentation_status = $_POST['documentation_status'] ?? 'Completed';
 
-        $pdo->prepare("
-            UPDATE media_documents 
-            SET approval_status = ?, documentation_status = ? 
-            WHERE id = ?
-        ")->execute([$approval_status, $documentation_status, $id]);
+        mcoll('media_documents')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'approval_status' => $approval_status,
+                'documentation_status' => $documentation_status,
+                'updated_at' => date('Y-m-d H:i:s')
+            ]]
+        );
 
         flash('success', 'Document status updated successfully.');
         redirect(BASE_URL . '/media_docs.php');
@@ -106,44 +115,95 @@ $q = trim($_GET['q'] ?? '');
 $categoryFilter = trim($_GET['category'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
 
-$sql = "
-    SELECT m.*, e.name as event_title, u.name as staff_name
-    FROM media_documents m
-    LEFT JOIN events e ON e.id = m.event_id
-    LEFT JOIN users u ON u.id = m.responsible_staff_id
-    WHERE 1=1
-";
-$params = [];
+$pipeline = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'events',
+        'localField' => 'event_id',
+        'foreignField' => 'id',
+        'as' => 'event_docs'
+    ]
+];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'responsible_staff_id',
+        'foreignField' => 'id',
+        'as' => 'staff_docs'
+    ]
+];
+$pipeline[] = [
+    '$addFields' => [
+        'event_title' => ['$ifNull' => [['$arrayElemAt' => ['$event_docs.name', 0]], '']],
+        'staff_name' => ['$ifNull' => [['$arrayElemAt' => ['$staff_docs.name', 0]], '']]
+    ]
+];
+$pipeline[] = [
+    '$project' => [
+        'event_docs' => 0,
+        'staff_docs' => 0
+    ]
+];
 
+$match = [];
 if ($q !== '') {
-    $sql .= " AND (m.title LIKE ? OR m.description LIKE ? OR m.media_task LIKE ?)";
-    $like = '%' . $q . '%';
-    $params = array_merge($params, [$like, $like, $like]);
+    $regex = new MongoDB\BSON\Regex($q, 'i');
+    $match['$or'] = [
+        ['title' => $regex],
+        ['description' => $regex],
+        ['media_task' => $regex]
+    ];
 }
 if ($categoryFilter !== '') {
-    $sql .= " AND m.category = ?";
-    $params[] = $categoryFilter;
+    $match['category'] = $categoryFilter;
 }
 if ($statusFilter !== '') {
-    $sql .= " AND (m.approval_status = ? OR m.documentation_status = ?)";
-    $params[] = $statusFilter;
-    $params[] = $statusFilter;
+    $match['$or'] = [
+        ['approval_status' => $statusFilter],
+        ['documentation_status' => $statusFilter]
+    ];
+}
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
 }
 
-$sql .= " ORDER BY m.id DESC";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$documents = $stmt->fetchAll();
+$pipeline[] = ['$sort' => ['id' => -1]];
+
+$cursor = mcoll('media_documents')->aggregate($pipeline);
+$documents = [];
+foreach ($cursor as $doc) {
+    $documents[] = mongo_doc_to_array($doc);
+}
 
 // Events & Staff for dropdown
-$events = $pdo->query("SELECT id, name as title FROM events ORDER BY event_date DESC")->fetchAll();
-$staffMembers = $pdo->query("SELECT id, name FROM users WHERE department LIKE '%Comm%' OR role = 'Staff / Volunteer' ORDER BY name")->fetchAll();
+$eventsCursor = mcoll('events')->find([], ['sort' => ['event_date' => -1]]);
+$events = [];
+foreach ($eventsCursor as $eDoc) {
+    $e = mongo_doc_to_array($eDoc);
+    $events[] = [
+        'id' => $e['id'],
+        'title' => $e['name'] ?? ''
+    ];
+}
+
+$staffFilter = [
+    '$or' => [
+        ['department' => new MongoDB\BSON\Regex('Comm', 'i')],
+        ['role' => 'Staff / Volunteer']
+    ]
+];
+$staffCursor = mcoll('users')->find($staffFilter, ['sort' => ['name' => 1]]);
+$staffMembers = [];
+foreach ($staffCursor as $uDoc) {
+    $staffMembers[] = mongo_doc_to_array($uDoc);
+}
 
 // Statistics
-$totalDocs = (int)$pdo->query("SELECT COUNT(*) FROM media_documents")->fetchColumn();
-$approvedDocs = (int)$pdo->query("SELECT COUNT(*) FROM media_documents WHERE approval_status = 'Approved'")->fetchColumn();
-$pendingReview = (int)$pdo->query("SELECT COUNT(*) FROM media_documents WHERE approval_status = 'Pending Review'")->fetchColumn();
-$activeTasks = (int)$pdo->query("SELECT COUNT(*) FROM media_documents WHERE documentation_status = 'In Progress'")->fetchColumn();
+$totalDocs = mcoll('media_documents')->countDocuments([]);
+$approvedDocs = mcoll('media_documents')->countDocuments(['approval_status' => 'Approved']);
+$pendingReview = mcoll('media_documents')->countDocuments(['approval_status' => 'Pending Review']);
+$activeTasks = mcoll('media_documents')->countDocuments(['documentation_status' => 'In Progress']);
+
 
 require __DIR__ . '/includes/header.php';
 ?>

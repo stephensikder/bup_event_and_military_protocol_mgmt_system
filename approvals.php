@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 if (!can_approve_events()) {
@@ -8,13 +9,10 @@ if (!can_approve_events()) {
     redirect(BASE_URL . '/dashboard.php');
 }
 
-$pdo = db();
-
 $page_title = 'Approvals | BUP Protocol';
 
-
 // =====================================================
-// HANDLE APPROVAL ACTION
+// HANDLE APPROVAL ACTION (MongoDB Atlas)
 // =====================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -29,122 +27,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     if (!$id || !in_array($decision, $allowedDecisions, true)) {
-
         flash('error', 'Invalid approval request.');
-
         redirect(BASE_URL . '/approvals.php');
     }
-
 
     // Get current event
-    $stmt = $pdo->prepare("
-        SELECT id, name, approval_status
-        FROM events
-        WHERE id = ?
-    ");
+    $eventDoc = mcoll('events')->findOne(['id' => $id]);
 
-    $stmt->execute([$id]);
-
-    $event = $stmt->fetch();
-
-
-    if (!$event) {
-
+    if (!$eventDoc) {
         flash('error', 'Event not found.');
-
         redirect(BASE_URL . '/approvals.php');
     }
+    $event = mongo_doc_to_array($eventDoc);
 
-
-    $oldStatus = $event['approval_status'];
-
+    $oldStatus = $event['approval_status'] ?? 'Draft';
 
     // Do not repeat same decision
     if ($oldStatus === $decision) {
-
-        flash(
-            'error',
-            'This event is already marked as ' . $decision . '.'
-        );
-
+        flash('error', 'This event is already marked as ' . $decision . '.');
         redirect(BASE_URL . '/approvals.php');
     }
 
-
     try {
-
-        $pdo->beginTransaction();
-
+        $now = date('Y-m-d H:i:s');
 
         // Update approval status
-        $stmt = $pdo->prepare("
-            UPDATE events
-            SET
-                approval_status = ?,
-                approved_by = ?,
-                approved_at = NOW()
-            WHERE id = ?
-        ");
-
-        $stmt->execute([
-            $decision,
-            current_user()['id'],
-            $id
-        ]);
-
+        mcoll('events')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'approval_status' => $decision,
+                'approved_by' => current_user()['id'],
+                'approved_at' => $now
+            ]]
+        );
 
         // Audit log
         $description =
             'Event "' .
-            $event['name'] .
+            ($event['name'] ?? '') .
             '" approval changed from ' .
             $oldStatus .
             ' to ' .
             $decision .
             '.';
 
-
-        $stmt = $pdo->prepare("
-            INSERT INTO audit_logs
-            (
-                user_id,
-                action,
-                description
-            )
-            VALUES (?, ?, ?)
-        ");
-
-        $stmt->execute([
+        mongo_audit_log(
             current_user()['id'],
             'Approval ' . $decision,
             $description
-        ]);
-
-
-        $pdo->commit();
-
-
-        flash(
-            'success',
-            'Approval status updated to ' . $decision . '.'
         );
+
+        flash('success', 'Approval status updated to ' . $decision . '.');
 
     } catch (Throwable $e) {
-
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-
-        flash(
-            'error',
-            'Unable to update approval status.'
-        );
+        flash('error', 'Unable to update approval status.');
     }
-
 
     redirect(BASE_URL . '/approvals.php');
 }
-
 
 // =====================================================
 // FILTERS
@@ -154,141 +94,106 @@ $search = trim($_GET['q'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
 $typeFilter = trim($_GET['type'] ?? '');
 
+// =====================================================
+// EVENT TYPES (MongoDB Atlas)
+// =====================================================
+
+$rawTypes = mcoll('events')->distinct('event_type');
+$types = [];
+foreach ($rawTypes as $t) {
+    if (!empty($t)) {
+        $types[] = (string)$t;
+    }
+}
+sort($types);
 
 // =====================================================
-// EVENT TYPES
-// =====================================================
-
-$types = $pdo->query("
-    SELECT DISTINCT event_type
-    FROM events
-    WHERE event_type IS NOT NULL
-      AND event_type <> ''
-    ORDER BY event_type
-")->fetchAll(PDO::FETCH_COLUMN);
-
-
-// =====================================================
-// APPROVAL STATISTICS
+// APPROVAL STATISTICS (MongoDB Atlas)
 // =====================================================
 
 $stats = [
-
-    'total' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-    ")->fetchColumn(),
-
-    'draft' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE approval_status = 'Draft'
-    ")->fetchColumn(),
-
-    'pending' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE approval_status = 'Pending'
-    ")->fetchColumn(),
-
-    'approved' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE approval_status = 'Approved'
-    ")->fetchColumn(),
-
-    'rejected' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE approval_status = 'Rejected'
-    ")->fetchColumn(),
-
-    'confirmed' => (int)$pdo->query("
-        SELECT COUNT(*)
-        FROM events
-        WHERE approval_status = 'Confirmed'
-    ")->fetchColumn()
+    'total' => mcoll('events')->countDocuments([]),
+    'draft' => mcoll('events')->countDocuments(['approval_status' => 'Draft']),
+    'pending' => mcoll('events')->countDocuments(['approval_status' => 'Pending']),
+    'approved' => mcoll('events')->countDocuments(['approval_status' => 'Approved']),
+    'rejected' => mcoll('events')->countDocuments(['approval_status' => 'Rejected']),
+    'confirmed' => mcoll('events')->countDocuments(['approval_status' => 'Confirmed'])
 ];
 
-
 // =====================================================
-// BUILD EVENT QUERY
+// BUILD EVENT QUERY (MongoDB Atlas Aggregation Pipeline)
 // =====================================================
 
-$sql = "
-    SELECT
-        e.*,
-        u.name AS approver
-    FROM events e
-    LEFT JOIN users u
-        ON u.id = e.approved_by
-    WHERE 1=1
-";
+$pipeline = [];
 
-$params = [];
+$pipeline[] = [
+    '$lookup' => [
+        'from' => 'users',
+        'localField' => 'approved_by',
+        'foreignField' => 'id',
+        'as' => 'approver_docs'
+    ]
+];
 
+$pipeline[] = [
+    '$addFields' => [
+        'approver' => ['$ifNull' => [['$arrayElemAt' => ['$approver_docs.name', 0]], null]],
+        'status_prio' => [
+            '$switch' => [
+                'branches' => [
+                    ['case' => ['$eq' => ['$approval_status', 'Pending']], 'then' => 1],
+                    ['case' => ['$eq' => ['$approval_status', 'Draft']], 'then' => 2],
+                    ['case' => ['$eq' => ['$approval_status', 'Rejected']], 'then' => 3],
+                    ['case' => ['$eq' => ['$approval_status', 'Approved']], 'then' => 4],
+                    ['case' => ['$eq' => ['$approval_status', 'Confirmed']], 'then' => 5],
+                ],
+                'default' => 6
+            ]
+        ]
+    ]
+];
 
-// Search
+$pipeline[] = [
+    '$project' => ['approver_docs' => 0]
+];
+
+$match = [];
+
 if ($search !== '') {
-
-    $sql .= "
-        AND (
-            e.name LIKE ?
-            OR e.event_type LIKE ?
-            OR e.venue LIKE ?
-        )
-    ";
-
-    $searchTerm = '%' . $search . '%';
-
-    $params[] = $searchTerm;
-    $params[] = $searchTerm;
-    $params[] = $searchTerm;
+    $regex = new MongoDB\BSON\Regex($search, 'i');
+    $match['$or'] = [
+        ['name' => $regex],
+        ['event_type' => $regex],
+        ['venue' => $regex]
+    ];
 }
 
-
-// Status filter
 if ($statusFilter !== '') {
-
-    $sql .= "
-        AND e.approval_status = ?
-    ";
-
-    $params[] = $statusFilter;
+    $match['approval_status'] = $statusFilter;
 }
 
-
-// Type filter
 if ($typeFilter !== '') {
-
-    $sql .= "
-        AND e.event_type = ?
-    ";
-
-    $params[] = $typeFilter;
+    $match['event_type'] = $typeFilter;
 }
 
+if (!empty($match)) {
+    $pipeline[] = ['$match' => $match];
+}
 
-$sql .= "
-    ORDER BY
-        CASE e.approval_status
-            WHEN 'Pending' THEN 1
-            WHEN 'Draft' THEN 2
-            WHEN 'Rejected' THEN 3
-            WHEN 'Approved' THEN 4
-            WHEN 'Confirmed' THEN 5
-            ELSE 6
-        END,
-        e.event_date ASC,
-        e.event_time ASC
-";
+$pipeline[] = [
+    '$sort' => [
+        'status_prio' => 1,
+        'event_date' => 1,
+        'event_time' => 1,
+        'id' => -1
+    ]
+];
 
-
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute($params);
-
-$events = $stmt->fetchAll();
+$cursor = mcoll('events')->aggregate($pipeline);
+$events = [];
+foreach ($cursor as $doc) {
+    $events[] = mongo_doc_to_array($doc);
+}
 
 
 // =====================================================

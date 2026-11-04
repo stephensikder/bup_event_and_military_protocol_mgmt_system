@@ -1,9 +1,9 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 
 require_login();
 
-$pdo = db();
 $page_title = 'Events | BUP Protocol';
 
 
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /*
     |--------------------------------------------------------------------------
-    | CREATE EVENT
+    | CREATE EVENT (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
 
@@ -57,67 +57,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/events.php#create-event');
         }
 
-        $stmt = $pdo->prepare(
-            "INSERT INTO events
-            (
-                name,
-                event_type,
-                mode,
-                meeting_link,
-                event_date,
-                event_time,
-                venue,
-                description,
-                status,
-                priority,
-                budget_total,
-                event_director_id,
-                event_coordinator_id,
-                venue_lead_id,
-                backup_person_id,
-                created_by
-            )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-        );
+        $id = mongo_next_id('events');
+        $currentUserId = (int)current_user()['id'];
 
-        $stmt->execute([
-            $name,
-            $event_type,
-            $mode,
-            $meeting_link,
-            $event_date,
-            $event_time,
-            $venue,
-            $description,
-            $status_value ?: 'Upcoming',
-            $priority,
-            $budget_total,
-            current_user()['id'],
-            $event_coordinator_id,
-            $venue_lead_id,
-            $backup_person_id,
-            current_user()['id']
+        mcoll('events')->insertOne([
+            'id' => $id,
+            'name' => $name,
+            'event_type' => $event_type,
+            'mode' => $mode,
+            'meeting_link' => $meeting_link,
+            'event_date' => $event_date,
+            'event_time' => $event_time,
+            'venue' => $venue,
+            'description' => $description,
+            'status' => $status_value ?: 'Upcoming',
+            'priority' => $priority,
+            'budget_total' => $budget_total,
+            'budget_approved' => 0,
+            'budget_notes' => null,
+            'event_director_id' => $currentUserId,
+            'event_coordinator_id' => $event_coordinator_id,
+            'venue_lead_id' => $venue_lead_id,
+            'backup_person_id' => $backup_person_id,
+            'approval_status' => 'Approved',
+            'approved_by' => $currentUserId,
+            'approved_at' => date('Y-m-d H:i:s'),
+            'created_by' => $currentUserId,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
         ]);
 
-        $id = $pdo->lastInsertId();
-
-        $pdo->prepare(
-            "INSERT INTO audit_logs
-            (
-                user_id,
-                action,
-                description
-            )
-            VALUES (?,?,?)"
-        )->execute([
-            current_user()['id'],
+        mongo_audit_log(
+            $currentUserId,
             'Event Created',
             'Created event #' . $id . ' — ' . $name . ' (' . $mode . ')'
-        ]);
+        );
 
         if (function_exists('add_user_notification')) {
-            $studentRows = $pdo->query("SELECT id FROM users WHERE role = 'Student' AND status = 'Active'")->fetchAll();
-            foreach ($studentRows as $sr) {
+            $studentCursor = mcoll('users')->find(['role' => 'Student', 'status' => 'Active'], ['projection' => ['id' => 1]]);
+            foreach ($studentCursor as $sr) {
                 add_user_notification(
                     (int)$sr['id'],
                     'New University Event: ' . $name,
@@ -131,38 +109,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Handle conversion from military event directive
         $from_request_id = (int)($_POST['from_request_id'] ?? 0);
         if ($from_request_id > 0) {
-            $pdo->prepare("UPDATE military_event_requests SET status = 'Converted to Event', converted_event_id = ? WHERE id = ?")
-                ->execute([$id, $from_request_id]);
+            mcoll('military_event_requests')->updateOne(
+                ['id' => $from_request_id],
+                ['$set' => [
+                    'status' => 'Converted to Event',
+                    'converted_event_id' => $id,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ]]
+            );
 
-            $reqStmt = $pdo->prepare("SELECT * FROM military_event_requests WHERE id = ?");
-            $reqStmt->execute([$from_request_id]);
-            $req = $reqStmt->fetch();
+            $req = mongo_doc_to_array(mcoll('military_event_requests')->findOne(['id' => $from_request_id]));
 
             if ($req && function_exists('add_user_notification')) {
                 // Notify Military Requester
                 add_user_notification(
                     (int)$req['requested_by'],
-                    'Military Directive Converted: ' . $req['request_id'],
+                    'Military Directive Converted: ' . ($req['request_id'] ?? ('REQ#' . $from_request_id)),
                     'Civil Event Director approved and converted directive "' . $req['title'] . '" into Event #' . $id . '.',
                     'event',
                     BASE_URL . '/event_view.php?id=' . $id
                 );
 
                 // Notify Civil Event Coordinator (L2)
-                $coordinators = $pdo->query("SELECT id FROM users WHERE (level = 'L2' OR role = 'Event Coordinator') AND status = 'Active'")->fetchAll(PDO::FETCH_COLUMN);
-                foreach ($coordinators as $cid) {
+                $coordinators = mcoll('users')->find([
+                    '$or' => [['level' => 'L2'], ['role' => 'Event Coordinator']],
+                    'status' => 'Active'
+                ]);
+                foreach ($coordinators as $cDoc) {
                     add_user_notification(
-                        (int)$cid,
+                        (int)$cDoc['id'],
                         'New Event from Military Directive: ' . $name,
-                        'Event #' . $id . ' was created from Military Directive ' . $req['request_id'] . '. Begin operational coordination.',
+                        'Event #' . $id . ' was created from Military Directive ' . ($req['request_id'] ?? ('REQ#' . $from_request_id)) . '. Begin operational coordination.',
                         'duty_assigned',
                         BASE_URL . '/event_view.php?id=' . $id
                     );
                 }
-            }
-
-            if (function_exists('mongo_sync_table')) {
-                mongo_sync_table('military_event_requests');
             }
         }
 
@@ -173,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /*
     |--------------------------------------------------------------------------
-    | UPDATE EVENT
+    | UPDATE EVENT (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
 
@@ -213,60 +194,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . '/events.php?edit=' . $id . '#edit-event');
         }
 
-        $check = $pdo->prepare("SELECT id FROM events WHERE id = ?");
-        $check->execute([$id]);
-
-        if (!$check->fetchColumn()) {
+        $check = mcoll('events')->findOne(['id' => $id]);
+        if (!$check) {
             flash('error', 'Event not found.');
             redirect(BASE_URL . '/events.php');
         }
 
-        $stmt = $pdo->prepare(
-            "UPDATE events
-             SET
-                name = ?,
-                event_type = ?,
-                mode = ?,
-                meeting_link = ?,
-                event_date = ?,
-                event_time = ?,
-                venue = ?,
-                description = ?,
-                status = ?,
-                priority = ?,
-                budget_total = ?,
-                event_coordinator_id = ?,
-                venue_lead_id = ?,
-                backup_person_id = ?
-             WHERE id = ?"
+        mcoll('events')->updateOne(
+            ['id' => $id],
+            ['$set' => [
+                'name' => $name,
+                'event_type' => $event_type,
+                'mode' => $mode,
+                'meeting_link' => $meeting_link,
+                'event_date' => $event_date,
+                'event_time' => $event_time,
+                'venue' => $venue,
+                'description' => $description,
+                'status' => $status_value,
+                'priority' => $priority,
+                'budget_total' => $budget_total,
+                'event_coordinator_id' => $event_coordinator_id,
+                'venue_lead_id' => $venue_lead_id,
+                'backup_person_id' => $backup_person_id,
+                'updated_at' => date('Y-m-d H:i:s')
+            ]]
         );
 
-        $stmt->execute([
-            $name,
-            $event_type,
-            $mode,
-            $meeting_link,
-            $event_date,
-            $event_time,
-            $venue,
-            $description,
-            $status_value,
-            $priority,
-            $budget_total,
-            $event_coordinator_id,
-            $venue_lead_id,
-            $backup_person_id,
-            $id
-        ]);
-
-        $pdo->prepare(
-            "INSERT INTO audit_logs(user_id, action, description)
-            VALUES (?,?,?)"
-        )->execute([
-            current_user()['id'],
+        mongo_audit_log(
+            (int)current_user()['id'],
             'Event Updated',
             'Updated event #' . $id . ' — ' . $name
-        ]);
+        );
 
         flash('success', 'Event updated successfully.');
         redirect(BASE_URL . '/events.php');
@@ -274,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /*
     |--------------------------------------------------------------------------
-    | CANCEL EVENT
+    | CANCEL EVENT (MongoDB Atlas)
     |--------------------------------------------------------------------------
     */
 
@@ -288,28 +247,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int) ($_POST['id'] ?? 0);
 
         if ($id > 0) {
-            $event_stmt = $pdo->prepare("SELECT name FROM events WHERE id = ?");
-            $event_stmt->execute([$id]);
-            $event_name = $event_stmt->fetchColumn();
+            $eventDoc = mcoll('events')->findOne(['id' => $id]);
+            if ($eventDoc) {
+                mcoll('events')->updateOne(
+                    ['id' => $id],
+                    ['$set' => [
+                        'status' => 'Cancelled',
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ]]
+                );
 
-            if ($event_name) {
-                $pdo->prepare("UPDATE events SET status = 'Cancelled' WHERE id = ?")->execute([$id]);
-
-
-                $pdo->prepare(
-                    "INSERT INTO audit_logs
-                    (
-                        user_id,
-                        action,
-                        description
-                    )
-                    VALUES (?,?,?)"
-                )->execute([
-                    current_user()['id'],
+                mongo_audit_log(
+                    (int)current_user()['id'],
                     'Event Cancelled',
-                    'Cancelled event #' . $id . ' — ' . $event_name
-                ]);
-
+                    'Cancelled event #' . $id . ' — ' . ($eventDoc['name'] ?? '')
+                );
 
                 flash(
                     'success',
@@ -325,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 /*
 |--------------------------------------------------------------------------
-| SEARCH & FILTER
+| SEARCH & FILTER (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -333,97 +285,56 @@ $q = trim($_GET['q'] ?? '');
 $status = trim($_GET['status'] ?? '');
 $type = trim($_GET['type'] ?? '');
 
-
-$sql = "
-    SELECT
-        e.*,
-        u.name AS creator
-    FROM events e
-    LEFT JOIN users u
-        ON u.id = e.created_by
-    WHERE 1
-";
-
-
-$params = [];
-
-
-/*
-|--------------------------------------------------------------------------
-| Search
-|--------------------------------------------------------------------------
-*/
+$matchFilter = [];
 
 if ($q !== '') {
-
-    $sql .= "
-        AND (
-            e.name LIKE ?
-            OR e.venue LIKE ?
-            OR e.description LIKE ?
-        )
-    ";
-
-    $search = "%{$q}%";
-
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
+    $matchFilter['$or'] = [
+        ['name' => new MongoDB\BSON\Regex($q, 'i')],
+        ['venue' => new MongoDB\BSON\Regex($q, 'i')],
+        ['description' => new MongoDB\BSON\Regex($q, 'i')]
+    ];
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| Status filter
-|--------------------------------------------------------------------------
-*/
 
 if ($status !== '') {
-
-    $sql .= " AND e.status = ?";
-
-    $params[] = $status;
+    $matchFilter['status'] = $status;
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| Type filter
-|--------------------------------------------------------------------------
-*/
 
 if ($type !== '') {
-
-    $sql .= " AND e.event_type = ?";
-
-    $params[] = $type;
+    $matchFilter['event_type'] = $type;
 }
 
+$eventsPipeline = [
+    ['$match' => $matchFilter ?: (object)[]],
+    ['$lookup' => [
+        'from' => 'users',
+        'localField' => 'created_by',
+        'foreignField' => 'id',
+        'as' => 'creator_arr'
+    ]],
+    ['$addFields' => [
+        'creator' => ['$arrayElemAt' => ['$creator_arr.name', 0]],
+        'status_order' => [
+            '$switch' => [
+                'branches' => [
+                    ['case' => ['$eq' => ['$status', 'Ongoing']], 'then' => 1],
+                    ['case' => ['$eq' => ['$status', 'Upcoming']], 'then' => 2],
+                    ['case' => ['$eq' => ['$status', 'Completed']], 'then' => 3],
+                    ['case' => ['$eq' => ['$status', 'Cancelled']], 'then' => 4],
+                ],
+                'default' => 5
+            ]
+        ]
+    ]],
+    ['$sort' => ['status_order' => 1, 'event_date' => 1, 'event_time' => 1]]
+];
 
-$sql .= "
-    ORDER BY
-        CASE
-            WHEN e.status = 'Ongoing' THEN 1
-            WHEN e.status = 'Upcoming' THEN 2
-            WHEN e.status = 'Completed' THEN 3
-            WHEN e.status = 'Cancelled' THEN 4
-            ELSE 5
-        END,
-        e.event_date ASC,
-        e.event_time ASC
-";
-
-
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute($params);
-
-$events = $stmt->fetchAll();
+$eventsCursor = mcoll('events')->aggregate($eventsPipeline);
+$events = array_map('mongo_doc_to_array', iterator_to_array($eventsCursor));
 
 
 /*
 |--------------------------------------------------------------------------
-| EDIT EVENT
+| EDIT EVENT & DROPDOWNS (MongoDB Atlas)
 |--------------------------------------------------------------------------
 */
 
@@ -432,29 +343,18 @@ $edit_event = null;
 $from_req_param = trim($_GET['from_request'] ?? '');
 $mil_req = null;
 if ($from_req_param !== '') {
-    $rqStmt = $pdo->prepare("SELECT * FROM military_event_requests WHERE request_id = ? OR id = ?");
-    $rqStmt->execute([$from_req_param, $from_req_param]);
-    $mil_req = $rqStmt->fetch();
+    $reqFilter = is_numeric($from_req_param)
+        ? ['$or' => [['id' => (int)$from_req_param], ['request_id' => $from_req_param]]]
+        : ['request_id' => $from_req_param];
+    $mil_req = mongo_doc_to_array(mcoll('military_event_requests')->findOne($reqFilter));
 }
 
 $edit_id = (int) ($_GET['edit'] ?? 0);
 
-
 if ($edit_id > 0) {
-
-    $stmt = $pdo->prepare(
-        "SELECT *
-         FROM events
-         WHERE id = ?"
-    );
-
-    $stmt->execute([$edit_id]);
-
-    $edit_event = $stmt->fetch();
-
+    $edit_event = mongo_doc_to_array(mcoll('events')->findOne(['id' => $edit_id]));
 
     if (!$edit_event) {
-
         flash(
             'error',
             'The selected event could not be found.'
@@ -463,6 +363,7 @@ if ($edit_id > 0) {
         redirect(BASE_URL . '/events.php');
     }
 }
+
 $available_venues = [
     'Shadhinota Auditorium 1st floor',
     'Shadhinota Auditorium 2nd floor',
@@ -474,9 +375,23 @@ $available_venues = [
     'VIP Protocol Lounge'
 ];
 
-$coordinators = $pdo->query("SELECT id, name, designation, role FROM users WHERE (role IN ('Event Coordinator','Admin') OR level = 'L2') AND status = 'Active' ORDER BY name")->fetchAll();
-$venue_leads = $pdo->query("SELECT id, name, designation, department FROM users WHERE (department IN ('Venue','Protocol','Logistics') OR level = 'L3') AND status = 'Active' ORDER BY name")->fetchAll();
-$eligible_backups = $pdo->query("SELECT id, name, designation, role, department FROM users WHERE status = 'Active' ORDER BY name")->fetchAll();
+$coordinators = array_values(array_map('mongo_doc_to_array', iterator_to_array(
+    mcoll('users')->find([
+        '$or' => [['role' => ['$in' => ['Event Coordinator', 'Admin']]], ['level' => 'L2']],
+        'status' => 'Active'
+    ], ['sort' => ['name' => 1]])
+)));
+
+$venue_leads = array_values(array_map('mongo_doc_to_array', iterator_to_array(
+    mcoll('users')->find([
+        '$or' => [['department' => ['$in' => ['Venue', 'Protocol', 'Logistics']]], ['level' => 'L3']],
+        'status' => 'Active'
+    ], ['sort' => ['name' => 1]])
+)));
+
+$eligible_backups = array_values(array_map('mongo_doc_to_array', iterator_to_array(
+    mcoll('users')->find(['status' => 'Active'], ['sort' => ['name' => 1]])
+)));
 
 require __DIR__ . '/includes/header.php';
 ?>

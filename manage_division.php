@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/mongo.php';
 require_login();
 
 $u = current_user();
@@ -10,36 +11,29 @@ if (!$is_higher_cmd) {
     redirect(BASE_URL . '/protocol.php');
 }
 
-$pdo = db();
 $page_title = 'Manage Division Accounts | Higher Command L1';
 
-// Handle Activate / Deactivate Actions
+// Handle Activate / Deactivate Actions (MongoDB Atlas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $user_id = (int)($_POST['user_id'] ?? 0);
 
     if ($user_id > 0) {
-        $target = $pdo->prepare("SELECT * FROM users WHERE id = ? AND protocol_level = 'Division'");
-        $target->execute([$user_id]);
-        $targetUser = $target->fetch();
+        $targetUser = mcoll('users')->findOne([
+            'id' => $user_id,
+            'protocol_level' => 'Division'
+        ]);
 
         if ($targetUser) {
+            $targetName = $targetUser['name'] ?? 'Division Account';
             if ($action === 'activate') {
-                $pdo->prepare("UPDATE users SET status = 'Active' WHERE id = ?")->execute([$user_id]);
-                $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                    ->execute([$u['id'], 'DIVISION ACTIVATED', 'Higher Command activated Division account: ' . $targetUser['name']]);
-                if (function_exists('mongo_sync_table')) {
-                    mongo_sync_table('users');
-                }
-                flash('success', 'Division account for ' . $targetUser['name'] . ' is now ACTIVE.');
+                mcoll('users')->updateOne(['id' => $user_id], ['$set' => ['status' => 'Active']]);
+                mongo_audit_log($u['id'], 'DIVISION ACTIVATED', 'Higher Command activated Division account: ' . $targetName);
+                flash('success', 'Division account for ' . $targetName . ' is now ACTIVE.');
             } elseif ($action === 'deactivate') {
-                $pdo->prepare("UPDATE users SET status = 'Inactive' WHERE id = ?")->execute([$user_id]);
-                $pdo->prepare("INSERT INTO audit_logs(user_id, action, description) VALUES (?, ?, ?)")
-                    ->execute([$u['id'], 'DIVISION DEACTIVATED', 'Higher Command deactivated Division account: ' . $targetUser['name']]);
-                if (function_exists('mongo_sync_table')) {
-                    mongo_sync_table('users');
-                }
-                flash('success', 'Division account for ' . $targetUser['name'] . ' has been DEACTIVATED.');
+                mcoll('users')->updateOne(['id' => $user_id], ['$set' => ['status' => 'Inactive']]);
+                mongo_audit_log($u['id'], 'DIVISION DEACTIVATED', 'Higher Command deactivated Division account: ' . $targetName);
+                flash('success', 'Division account for ' . $targetName . ' has been DEACTIVATED.');
             }
         } else {
             flash('error', 'Target division account not found or does not hold Division protocol level.');
@@ -48,14 +42,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(BASE_URL . '/manage_division.php');
 }
 
-// Fetch all Level 2 Division Accounts and their associated military units
-$divisions = $pdo->query("
-    SELECT u.*, mpu.code as unit_code, mpu.name as unit_name, mpu.hq_location
-    FROM users u
-    LEFT JOIN military_protocol_units mpu ON mpu.commander_id = u.id AND mpu.level = 'Division'
-    WHERE u.protocol_level = 'Division' OR u.department LIKE '%Division%'
-    ORDER BY u.id ASC
-")->fetchAll();
+// Fetch all Level 2 Division Accounts and their associated military units (MongoDB Atlas)
+$divDocs = mcoll('users')->find([
+    '$or' => [
+        ['protocol_level' => 'Division'],
+        ['department' => ['$regex' => 'Division', '$options' => 'i']]
+    ]
+], ['sort' => ['id' => 1]]);
+
+$divisions = [];
+foreach ($divDocs as $dDoc) {
+    $div = mongo_doc_to_array($dDoc);
+    $divId = (int)$div['id'];
+    $unitDoc = mcoll('military_protocol_units')->findOne([
+        'commander_id' => $divId,
+        'level' => 'Division'
+    ]);
+    $div['unit_code'] = $unitDoc['code'] ?? null;
+    $div['unit_name'] = $unitDoc['name'] ?? null;
+    $div['hq_location'] = $unitDoc['hq_location'] ?? null;
+    $divisions[] = $div;
+}
 
 require __DIR__ . '/includes/header.php';
 ?>
