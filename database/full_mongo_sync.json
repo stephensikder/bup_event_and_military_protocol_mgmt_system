@@ -1,0 +1,4124 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "name": "System Administrator",
+            "email": "admin@bup.local",
+            "password_hash": "$2y$10$LHd2IizGJPwfDzBtpgJlkOhcz132FFooGW5WhWvDNxde7AvQAUK2y",
+            "role": "Event Director",
+            "department": "Overall Command",
+            "level": "L1",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Event Director \/ Administrator",
+            "student_id": null,
+            "phone": "01700000001",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 20:50:36",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "name": "Event Management Officer",
+            "email": "event@bup.local",
+            "password_hash": "$2y$10$EJDN3sKgHR01\/lNu\/qXibOIJNlJ.EQU66eNsaaUJUI3KeWApHaJHK",
+            "role": "Event Coordinator",
+            "department": "Co-ordination",
+            "level": "L2",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Event Management Officer",
+            "student_id": null,
+            "phone": "01700000002",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "name": "Major F. Kabir (Protocol Lead)",
+            "email": "protocol@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Department Lead",
+            "department": "Protocol",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Chief Protocol & VIP Officer",
+            "student_id": null,
+            "phone": "+8801711000004",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 22:16:46",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 4,
+            "name": "Duty Personnel",
+            "email": "duty@bup.local",
+            "password_hash": "$2y$10$zuT1SFLD9YC3mzsiMPnnPuZ4biTiZyg2I2tDhMDkPaW9f\/NaZi.NS",
+            "role": "Supervisor",
+            "department": "Security",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Duty Coordinator",
+            "student_id": null,
+            "phone": "01700000004",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-27 02:53:30",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 5,
+            "name": "BUP Official",
+            "email": "official@bup.local",
+            "password_hash": "$2y$10$p8f9aqRf2I8AVUvElb\/rWObz3Im\/a6O157ePER5isUCToY1eSi9Ji",
+            "role": "BUP Official",
+            "department": null,
+            "level": "L1",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "University Official",
+            "student_id": null,
+            "phone": "01700000005",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 6,
+            "name": "Event Director (Command)",
+            "email": "director@bup.local",
+            "password_hash": "$2y$10$QLk3cxcopTrS22mBm43rdeNgtHoOhHSJ.4TL5aJmf0tLNIV7tLru.",
+            "role": "Event Director",
+            "department": "Overall Command",
+            "level": "L1",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Chief Event Director",
+            "student_id": null,
+            "phone": "01700000001",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:05:00",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 7,
+            "name": "Event Coordinator",
+            "email": "coordinator@bup.local",
+            "password_hash": "$2y$10$QLk3cxcopTrS22mBm43rdeNgtHoOhHSJ.4TL5aJmf0tLNIV7tLru.",
+            "role": "Event Coordinator",
+            "department": "Co-ordination",
+            "level": "L2",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Senior Event Coordinator",
+            "student_id": null,
+            "phone": "01700000002",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 8,
+            "name": "Protocol Team Lead",
+            "email": "lead@bup.local",
+            "password_hash": "$2y$10$QLk3cxcopTrS22mBm43rdeNgtHoOhHSJ.4TL5aJmf0tLNIV7tLru.",
+            "role": "Department Lead",
+            "department": "Protocol",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Head of Protocol & VIP Handling",
+            "student_id": null,
+            "phone": "01700000003",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:16:39",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 9,
+            "name": "Protocol Supervisor",
+            "email": "supervisor@bup.local",
+            "password_hash": "$2y$10$QLk3cxcopTrS22mBm43rdeNgtHoOhHSJ.4TL5aJmf0tLNIV7tLru.",
+            "role": "Supervisor",
+            "department": "Protocol",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "On-Site Ground Supervisor",
+            "student_id": null,
+            "phone": "01700000004",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:16:29",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 10,
+            "name": "Duty Staff \/ Volunteer",
+            "email": "staff@bup.local",
+            "password_hash": "$2y$10$QLk3cxcopTrS22mBm43rdeNgtHoOhHSJ.4TL5aJmf0tLNIV7tLru.",
+            "role": "Staff \/ Volunteer",
+            "department": "Protocol",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Ground Execution Crew",
+            "student_id": null,
+            "phone": "01700000005",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:16:26",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 11,
+            "name": "General S. M. Shafiuddin (Higher Command)",
+            "email": "highercmd@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "Higher Command",
+            "level": "L1",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "Higher Command",
+            "parent_command_id": null,
+            "command_code": "HQ-CMD-01",
+            "designation": "Chief of Higher Command \/ General",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:05:32",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 12,
+            "name": "Major General M. Rahman (Division Commander)",
+            "email": "division@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "9th Infantry Division",
+            "level": "L2",
+            "reports_to_id": 11,
+            "backup_person_id": null,
+            "protocol_level": "Division",
+            "parent_command_id": 11,
+            "command_code": "DIV-09-GOC",
+            "designation": "General Officer Commanding (GOC)",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:37",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 13,
+            "name": "Brigadier General A. K. Azad (Brigade Commander)",
+            "email": "brigade@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "71st Infantry Brigade",
+            "level": "L3",
+            "reports_to_id": 12,
+            "backup_person_id": null,
+            "protocol_level": "Brigade",
+            "parent_command_id": 12,
+            "command_code": "BGD-71-CMD",
+            "designation": "Commander, 71st Brigade",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:37",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 14,
+            "name": "Lieutenant Colonel F. Hossain (Battalion CO)",
+            "email": "battalion@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "1st East Bengal Battalion",
+            "level": "L3",
+            "reports_to_id": 13,
+            "backup_person_id": null,
+            "protocol_level": "Battalion",
+            "parent_command_id": 13,
+            "command_code": "BTN-01-CO",
+            "designation": "Commanding Officer (CO)",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-30 00:15:42",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 15,
+            "name": "Major K. M. Bashir (Company Commander)",
+            "email": "company@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "Alpha Company",
+            "level": "L4",
+            "reports_to_id": 14,
+            "backup_person_id": null,
+            "protocol_level": "Company",
+            "parent_command_id": 14,
+            "command_code": "CO-ALPHA-OC",
+            "designation": "Officer Commanding (OC)",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:37",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 16,
+            "name": "Captain T. Mahmood (Platoon Commander)",
+            "email": "platoon@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "1st Platoon",
+            "level": "L4",
+            "reports_to_id": 15,
+            "backup_person_id": null,
+            "protocol_level": "Platoon",
+            "parent_command_id": 15,
+            "command_code": "PLT-01-CDR",
+            "designation": "Platoon Commander",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:37",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 17,
+            "name": "Sergeant R. Karim (Section Commander)",
+            "email": "section@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "Section 1",
+            "level": "L5",
+            "reports_to_id": 16,
+            "backup_person_id": null,
+            "protocol_level": "Section",
+            "parent_command_id": 16,
+            "command_code": "SEC-01-CDR",
+            "designation": "Section Commander",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 18,
+            "name": "Corporal N. Islam (Individual Soldier)",
+            "email": "soldier@bup.local",
+            "password_hash": "$2y$10$f88izxh2fvb4f6zZg9SsqeFx.rX.nmAI7LEsMF5BGnv9pVQ29HIfW",
+            "role": "Military Command",
+            "department": "Ceremonial Guard",
+            "level": "L5",
+            "reports_to_id": 17,
+            "backup_person_id": null,
+            "protocol_level": "Individual Soldier",
+            "parent_command_id": 17,
+            "command_code": "SLD-8821",
+            "designation": "Individual Soldier \/ Escort Personnel",
+            "student_id": null,
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-27 00:11:40"
+        },
+        {
+            "id": 19,
+            "name": "Major Asif Hossain (Venue Lead)",
+            "email": "venue@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Department Lead",
+            "department": "Venue",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Head of Venue & Physical Infrastructure",
+            "student_id": null,
+            "phone": "+8801711000001",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 22:05:42",
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 20,
+            "name": "Lieutenant Commander S. Alam (Security Lead)",
+            "email": "security@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Department Lead",
+            "department": "Security",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Chief of Event Security & Safety",
+            "student_id": null,
+            "phone": "+8801711000002",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 21,
+            "name": "Squadron Leader R. Chowdhury (Logistics Lead)",
+            "email": "logistics@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Department Lead",
+            "department": "Logistics",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Director of Logistics & Equipment Fleet",
+            "student_id": null,
+            "phone": "+8801711000003",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 22,
+            "name": "Captain M. Nawaz (Communication Lead)",
+            "email": "comm@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Department Lead",
+            "department": "Communication",
+            "level": "L3",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Head of Public Relations & Media Cell",
+            "student_id": null,
+            "phone": "+8801711000005",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:57:38",
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 23,
+            "name": "Subedar M. Ali (Venue Supervisor)",
+            "email": "venue.sup@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Supervisor",
+            "department": "Venue",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Hall & Stage Ground Supervisor",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 24,
+            "name": "Naik R. Mia (Venue Crew)",
+            "email": "venue.staff@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Staff \/ Volunteer",
+            "department": "Venue",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Stage & Seating Execution Crew",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 25,
+            "name": "Subedar K. Ahmed (Security Supervisor)",
+            "email": "security.sup@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Supervisor",
+            "department": "Security",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Perimeter & Access Control In-Charge",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 26,
+            "name": "Corporal H. Rashid (Security Staff)",
+            "email": "security.staff@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Staff \/ Volunteer",
+            "department": "Security",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Entry Gate Scanner & Guard",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 27,
+            "name": "Warrant Officer B. Das (Logistics Supervisor)",
+            "email": "logistics.sup@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Supervisor",
+            "department": "Logistics",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Transport & AV Asset Supervisor",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 28,
+            "name": "Sergeant T. Paul (Logistics Staff)",
+            "email": "logistics.staff@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Staff \/ Volunteer",
+            "department": "Logistics",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Equipment Dispatch Crew",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 29,
+            "name": "Captain N. Jahan (Protocol Supervisor)",
+            "email": "protocol.sup@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Supervisor",
+            "department": "Protocol",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "VIP Escort Line Supervisor",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 30,
+            "name": "Lieutenant D. Haque (Communication Supervisor)",
+            "email": "comm.sup@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Supervisor",
+            "department": "Communication",
+            "level": "L4",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Media & Documentation In-Charge",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 31,
+            "name": "Corporal J. Hossain (Communication Staff)",
+            "email": "comm.staff@bup.local",
+            "password_hash": "$2y$10$yc.3f2zNoW6o246c4Srf9exnU8pSp.2RNZsnpJIzr.8TLD7eRJadu",
+            "role": "Staff \/ Volunteer",
+            "department": "Communication",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "Audio-Visual & Announcement Crew",
+            "student_id": null,
+            "phone": "+8801700000000",
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": null,
+            "created_at": "2026-10-27 02:31:03"
+        },
+        {
+            "id": 32,
+            "name": "Test Student Registration",
+            "email": "student.test.1793296168@bup.edu.bd",
+            "password_hash": "$2y$10$TBeyoi5W\/Iz04woo41.W9ONBJQkcWq76P3qtG6Y\/4zIaRj7DVa8tS",
+            "role": "Student",
+            "department": "Faculty of Science & Technology (FST)",
+            "level": "L5",
+            "reports_to_id": null,
+            "backup_person_id": null,
+            "protocol_level": "None",
+            "parent_command_id": null,
+            "command_code": null,
+            "designation": "BUP Student (2105999)",
+            "student_id": "2105999",
+            "phone": null,
+            "status": "Active",
+            "failed_attempts": 0,
+            "last_login": "2026-10-29 23:49:28",
+            "created_at": "2026-10-29 23:49:28"
+        }
+    ],
+    "events": [
+        {
+            "id": 1,
+            "name": "BUP Annual Academic Conference",
+            "event_type": "Academic",
+            "mode": "Offline",
+            "event_date": "2026-10-31",
+            "event_time": "10:00:00",
+            "venue": "BUP Grand Auditorium",
+            "meeting_link": "",
+            "description": "Annual academic conference with invited faculty and officials.",
+            "budget_total": "200000.00",
+            "budget_approved": 0,
+            "budget_notes": null,
+            "event_director_id": null,
+            "event_coordinator_id": null,
+            "venue_lead_id": null,
+            "backup_person_id": null,
+            "status": "Upcoming",
+            "priority": 1,
+            "approval_status": "Approved",
+            "approved_by": null,
+            "approved_at": null,
+            "created_by": 1,
+            "created_at": "2026-10-24 15:14:15",
+            "updated_at": "2026-10-29 21:24:40"
+        },
+        {
+            "id": 2,
+            "name": "Official Delegation Reception",
+            "event_type": "Official",
+            "mode": "Offline",
+            "event_date": "2026-11-07",
+            "event_time": "16:30:00",
+            "venue": "Protocol Lounge",
+            "meeting_link": null,
+            "description": "Formal reception and guest coordination for an official delegation.",
+            "budget_total": "0.00",
+            "budget_approved": 0,
+            "budget_notes": null,
+            "event_director_id": null,
+            "event_coordinator_id": null,
+            "venue_lead_id": null,
+            "backup_person_id": null,
+            "status": "Upcoming",
+            "priority": 1,
+            "approval_status": "Pending",
+            "approved_by": null,
+            "approved_at": null,
+            "created_by": 1,
+            "created_at": "2026-10-24 15:14:15",
+            "updated_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "name": "Military Leadership Seminar",
+            "event_type": "Military",
+            "mode": "Offline",
+            "event_date": "2026-11-14",
+            "event_time": "09:30:00",
+            "venue": "Seminar Hall A",
+            "meeting_link": null,
+            "description": "Leadership and strategic affairs seminar.",
+            "budget_total": "0.00",
+            "budget_approved": 0,
+            "budget_notes": null,
+            "event_director_id": null,
+            "event_coordinator_id": null,
+            "venue_lead_id": null,
+            "backup_person_id": null,
+            "status": "Upcoming",
+            "priority": 0,
+            "approval_status": "Pending",
+            "approved_by": null,
+            "approved_at": null,
+            "created_by": 1,
+            "created_at": "2026-10-24 15:14:15",
+            "updated_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 4,
+            "name": "BUP CS Seminar",
+            "event_type": "Seminar",
+            "mode": "Online",
+            "event_date": "2026-10-24",
+            "event_time": "22:29:00",
+            "venue": "Online Virtual Hall",
+            "meeting_link": "https:\/\/meet.google.com\/wsk-rajx-pie",
+            "description": "",
+            "budget_total": "5000000.00",
+            "budget_approved": 0,
+            "budget_notes": null,
+            "event_director_id": null,
+            "event_coordinator_id": null,
+            "venue_lead_id": null,
+            "backup_person_id": null,
+            "status": "Upcoming",
+            "priority": 1,
+            "approval_status": "Approved",
+            "approved_by": 1,
+            "approved_at": "2026-10-24 15:39:33",
+            "created_by": 1,
+            "created_at": "2026-10-24 15:24:04",
+            "updated_at": "2026-10-29 21:24:25"
+        },
+        {
+            "id": 5,
+            "name": "IEEE WIE Workshop On AI",
+            "event_type": "Seminar",
+            "mode": "Offline",
+            "event_date": "2026-10-27",
+            "event_time": "10:31:00",
+            "venue": "Shadhinota Auditorium 1st floor",
+            "meeting_link": "",
+            "description": "",
+            "budget_total": "100000.00",
+            "budget_approved": 0,
+            "budget_notes": null,
+            "event_director_id": null,
+            "event_coordinator_id": null,
+            "venue_lead_id": null,
+            "backup_person_id": null,
+            "status": "Upcoming",
+            "priority": 1,
+            "approval_status": "Approved",
+            "approved_by": 1,
+            "approved_at": "2026-10-26 22:34:46",
+            "created_by": 1,
+            "created_at": "2026-10-26 22:32:18",
+            "updated_at": "2026-10-29 21:24:34"
+        }
+    ],
+    "guests": [
+        {
+            "id": 1,
+            "event_id": 1,
+            "name": "Brigadier General Guest",
+            "designation": "Guest of Honour",
+            "organization": "Bangladesh Armed Forces",
+            "phone": "01810000001",
+            "email": "guest1@example.local",
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "event_id": 1,
+            "name": "Professor Guest",
+            "designation": "Keynote Speaker",
+            "organization": "Academic Institution",
+            "phone": "01810000002",
+            "email": "guest2@example.local",
+            "category": "Special Guest",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "event_id": 2,
+            "name": "Official Delegate",
+            "designation": "Delegation Member",
+            "organization": "Government Office",
+            "phone": "01810000003",
+            "email": "guest3@example.local",
+            "category": "Official",
+            "priority_level": "Official",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 4,
+            "event_id": 4,
+            "name": "Stephen Sikder",
+            "designation": null,
+            "organization": null,
+            "phone": null,
+            "email": "stephensikder2004@gmail.com",
+            "category": "Invited Guest",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Arrived",
+            "created_at": "2026-10-24 15:48:31"
+        },
+        {
+            "id": 6,
+            "event_id": 1,
+            "name": "Major General Md. Mahbubur Rahman",
+            "designation": "Chief Guest \/ Vice Chancellor",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 7,
+            "event_id": 1,
+            "name": "Prof. Dr. Syed Anwarul Huq",
+            "designation": "Dean of Academic Affairs",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 8,
+            "event_id": 1,
+            "name": "Brigadier General Tanvir Ahmed",
+            "designation": "Director of Protocol",
+            "organization": "Armed Forces Division",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 9,
+            "event_id": 1,
+            "name": "Dr. Nasreen Sultana",
+            "designation": "Keynote Speaker",
+            "organization": "University of Dhaka",
+            "phone": null,
+            "email": null,
+            "category": "Special Guest",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 10,
+            "event_id": 1,
+            "name": "Lt. Col. Faruq Hossain",
+            "designation": "Registrar",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 11,
+            "event_id": 1,
+            "name": "Prof. Dr. Kazi Shafiul",
+            "designation": "Head of Department (CSE)",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "Faculty",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 12,
+            "event_id": 1,
+            "name": "Barrister Raisul Islam",
+            "designation": "Legal Advisor",
+            "organization": "Supreme Court of Bangladesh",
+            "phone": null,
+            "email": null,
+            "category": "Special Guest",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 13,
+            "event_id": 1,
+            "name": "Wing Commander Asif Iqbal",
+            "designation": "Director Security",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 14,
+            "event_id": 1,
+            "name": "Dr. Farhana Yasmin",
+            "designation": "Associate Professor",
+            "organization": "BUP",
+            "phone": null,
+            "email": null,
+            "category": "Faculty",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 15,
+            "event_id": 1,
+            "name": "Captain Rehan Karim",
+            "designation": "Military Protocol Officer",
+            "organization": "AFD",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 16,
+            "event_id": 1,
+            "name": "Mr. Tariqul Anam",
+            "designation": "Executive Delegate",
+            "organization": "Ministry of Education",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 17,
+            "event_id": 1,
+            "name": "Ms. Sabrina Chowdhury",
+            "designation": "Senior Research Fellow",
+            "organization": "BUP Research Wing",
+            "phone": null,
+            "email": null,
+            "category": "Guest",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 18,
+            "event_id": 2,
+            "name": "Ambassador Charles Miller",
+            "designation": "Foreign Envoy",
+            "organization": "Diplomatic Mission",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 19,
+            "event_id": 2,
+            "name": "Commodore Tariqul Islam",
+            "designation": "Naval Attache",
+            "organization": "Bangladesh Navy",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 20,
+            "event_id": 2,
+            "name": "Counselor Marie Laurent",
+            "designation": "Deputy Chief of Mission",
+            "organization": "Embassy Delegation",
+            "phone": null,
+            "email": null,
+            "category": "Special Guest",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 21,
+            "event_id": 2,
+            "name": "Col. Shakil Ahmed",
+            "designation": "Protocol Escort Commander",
+            "organization": "AFD Protocol",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 22,
+            "event_id": 2,
+            "name": "Dr. Aminul Islam",
+            "designation": "Diplomatic Advisor",
+            "organization": "Ministry of Foreign Affairs",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 23,
+            "event_id": 3,
+            "name": "Lieutenant General M. R. Chowdhury",
+            "designation": "Guest of Honour",
+            "organization": "Army Headquarters",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 24,
+            "event_id": 3,
+            "name": "Major General Saiful Bari",
+            "designation": "Commandant",
+            "organization": "Defence Services College",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 25,
+            "event_id": 3,
+            "name": "Commodore M. A. Hasan",
+            "designation": "Naval Operations Director",
+            "organization": "Naval HQ",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 26,
+            "event_id": 3,
+            "name": "Air Commodore Rezaul Karim",
+            "designation": "Air Base Commander",
+            "organization": "BAF",
+            "phone": null,
+            "email": null,
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 27,
+            "event_id": 3,
+            "name": "Colonel Masud Parvez",
+            "designation": "Chief Instructor",
+            "organization": "Military Academy",
+            "phone": null,
+            "email": null,
+            "category": "Special Guest",
+            "priority_level": "High",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 28,
+            "event_id": 3,
+            "name": "Lt. Col. Tariq Mahmud",
+            "designation": "Directing Staff",
+            "organization": "Command College",
+            "phone": null,
+            "email": null,
+            "category": "Official",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-25 01:29:57"
+        },
+        {
+            "id": 29,
+            "event_id": 5,
+            "name": "Arana Das",
+            "designation": null,
+            "organization": null,
+            "phone": null,
+            "email": "aranad974@gmail.com",
+            "category": "Invited Guest",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Arrived",
+            "created_at": "2026-10-26 22:33:32"
+        },
+        {
+            "id": 30,
+            "event_id": 5,
+            "name": "Hridoy Sikder",
+            "designation": null,
+            "organization": null,
+            "phone": null,
+            "email": "touristhridoy2004@gmail.com",
+            "category": "Invited Guest",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Arrived",
+            "created_at": "2026-10-27 01:41:41"
+        },
+        {
+            "id": 31,
+            "event_id": 5,
+            "name": "Argho Sikder",
+            "designation": null,
+            "organization": null,
+            "phone": null,
+            "email": "arghorisky@gmail.com",
+            "category": "Invited Guest",
+            "priority_level": "Normal",
+            "assigned_lead_id": null,
+            "venue_notes": null,
+            "assigned_seat": null,
+            "arrival_status": "Arrived",
+            "created_at": "2026-10-29 21:41:52"
+        },
+        {
+            "id": 34,
+            "event_id": 5,
+            "name": "Stephen Sikder",
+            "designation": "Manager",
+            "organization": "BAT",
+            "phone": "01709146149",
+            "email": "stephensikder2004@gmail.com",
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": 28,
+            "venue_notes": "Front Row",
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-29 21:48:56"
+        },
+        {
+            "id": 35,
+            "event_id": 4,
+            "name": "Sharmeen Sheema",
+            "designation": "",
+            "organization": "",
+            "phone": "",
+            "email": "",
+            "category": "VIP",
+            "priority_level": "VIP",
+            "assigned_lead_id": null,
+            "venue_notes": "",
+            "assigned_seat": null,
+            "arrival_status": "Expected",
+            "created_at": "2026-10-29 21:51:03"
+        }
+    ],
+    "duties": [
+        {
+            "id": 1,
+            "event_id": 1,
+            "title": "Main Gate Coordination",
+            "department": "Protocol",
+            "level": "L5",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Coordinate guest entry and reception.",
+            "notes": null,
+            "location": null,
+            "time_slot": null,
+            "reports_to": null,
+            "supervisor_id": null,
+            "backup_person": null,
+            "backup_user_id": null,
+            "priority": "Medium",
+            "assigned_to": 4,
+            "assigned_by": null,
+            "status": "Assigned",
+            "due_at": "2026-10-29 15:14:15",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "event_id": 1,
+            "title": "VIP Seating Verification",
+            "department": "Protocol",
+            "level": "L5",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Verify VIP seating plan before arrival.",
+            "notes": null,
+            "location": null,
+            "time_slot": null,
+            "reports_to": null,
+            "supervisor_id": null,
+            "backup_person": null,
+            "backup_user_id": null,
+            "priority": "Medium",
+            "assigned_to": 3,
+            "assigned_by": null,
+            "status": "Pending",
+            "due_at": "2026-10-30 15:14:15",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "event_id": 2,
+            "title": "Transport Coordination",
+            "department": "Protocol",
+            "level": "L5",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Confirm vehicle and parking arrangements.",
+            "notes": null,
+            "location": null,
+            "time_slot": null,
+            "reports_to": null,
+            "supervisor_id": null,
+            "backup_person": null,
+            "backup_user_id": null,
+            "priority": "Medium",
+            "assigned_to": 2,
+            "assigned_by": null,
+            "status": "Ongoing",
+            "due_at": "2026-11-05 15:14:15",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 4,
+            "event_id": 1,
+            "title": "VIP Reception & Red Carpet Coordination",
+            "department": "Protocol",
+            "level": "L5",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Receive arriving VIP guests at the main porch, verify registration token, and usher to designated lounge.",
+            "notes": null,
+            "location": "Main Entrance \/ Porch",
+            "time_slot": "17:30 - 19:00",
+            "reports_to": "Protocol Lead",
+            "supervisor_id": null,
+            "backup_person": "Staff Reserve B",
+            "backup_user_id": null,
+            "priority": "High",
+            "assigned_to": 10,
+            "assigned_by": 9,
+            "status": "Completed",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 5,
+            "event_id": 1,
+            "title": "On-Site VIP Escort & Seating Verification",
+            "department": "Protocol",
+            "level": "L4",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Supervise escort team and ensure all reserved row seats are properly tagged and guarded.",
+            "notes": null,
+            "location": "Grand Auditorium Row A-C",
+            "time_slot": "17:00 - 20:00",
+            "reports_to": "Protocol Lead",
+            "supervisor_id": null,
+            "backup_person": "Protocol Officer 2",
+            "backup_user_id": null,
+            "priority": "High",
+            "assigned_to": 9,
+            "assigned_by": 8,
+            "status": "Assigned",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 6,
+            "event_id": 1,
+            "title": "Guest & VIP Handling Department Oversight",
+            "department": "Protocol",
+            "level": "L3",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Overall leadership of Protocol department: guest reception, VIP movement, and ceremonial sequence alignment.",
+            "notes": null,
+            "location": "Protocol Command Desk",
+            "time_slot": "15:00 - 21:00",
+            "reports_to": "Event Coordinator",
+            "supervisor_id": null,
+            "backup_person": "Dep. Protocol Lead",
+            "backup_user_id": null,
+            "priority": "High",
+            "assigned_to": 8,
+            "assigned_by": 7,
+            "status": "Ongoing",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 7,
+            "event_id": 1,
+            "title": "Main Gate Security & Access Control",
+            "department": "Security",
+            "level": "L4",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Supervise gate security, metal detector checkpoints, and vehicle pass verification.",
+            "notes": null,
+            "location": "North & South Gate",
+            "time_slot": "16:00 - 21:00",
+            "reports_to": "Security Lead",
+            "supervisor_id": null,
+            "backup_person": "Security Reserve 1",
+            "backup_user_id": null,
+            "priority": "High",
+            "assigned_to": 9,
+            "assigned_by": 7,
+            "status": "Ongoing",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 8,
+            "event_id": 1,
+            "title": "Stage AV, Lighting & Technical Setup Check",
+            "department": "Venue",
+            "level": "L4",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Perform sound check, mic batteries verification, projector calibration, and backup power switch testing.",
+            "notes": null,
+            "location": "Grand Auditorium Stage & Control Room",
+            "time_slot": "14:00 - 17:00",
+            "reports_to": "Venue Lead",
+            "supervisor_id": null,
+            "backup_person": "Tech Specialist",
+            "backup_user_id": null,
+            "priority": "Medium",
+            "assigned_to": 10,
+            "assigned_by": 7,
+            "status": "Completed",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 9,
+            "event_id": 1,
+            "title": "VIP Transport & Parking Allocation",
+            "department": "Logistics",
+            "level": "L4",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Ensure designated parking slots VIP-1 to VIP-20 are clear and usher VIP vehicles smoothly.",
+            "notes": null,
+            "location": "Campus VIP Parking Zone",
+            "time_slot": "16:30 - 18:30",
+            "reports_to": "Logistics Lead",
+            "supervisor_id": null,
+            "backup_person": "Logistics Guard",
+            "backup_user_id": null,
+            "priority": "Medium",
+            "assigned_to": 10,
+            "assigned_by": 7,
+            "status": "Pending",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 10,
+            "event_id": 1,
+            "title": "Media & Information Desk Operations",
+            "department": "Communication",
+            "level": "L5",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Manage press registration, issue media badges, and distribute event press kit packets.",
+            "notes": null,
+            "location": "Media Center Lobby",
+            "time_slot": "16:30 - 19:30",
+            "reports_to": "Communication Lead",
+            "supervisor_id": null,
+            "backup_person": "Media Volunteer",
+            "backup_user_id": null,
+            "priority": "Low",
+            "assigned_to": 10,
+            "assigned_by": 7,
+            "status": "Completed",
+            "due_at": "2026-10-27 16:03:35",
+            "created_at": "2026-10-24 16:03:35"
+        },
+        {
+            "id": 11,
+            "event_id": 4,
+            "title": "Online Poster Making",
+            "department": "Communication",
+            "level": "L4",
+            "duty_date": null,
+            "start_time": null,
+            "end_time": null,
+            "description": "Poster should be made as soon as possible.",
+            "notes": null,
+            "location": "",
+            "time_slot": "20:00 to 21:05",
+            "reports_to": "Venue Supervisor",
+            "supervisor_id": null,
+            "backup_person": "Staff C",
+            "backup_user_id": null,
+            "priority": "",
+            "assigned_to": 4,
+            "assigned_by": 1,
+            "status": "Assigned",
+            "due_at": "2026-10-26 23:10:00",
+            "created_at": "2026-10-26 22:11:21"
+        },
+        {
+            "id": 12,
+            "event_id": 5,
+            "title": "Welcoming Guests",
+            "department": "Logistics",
+            "level": "L2",
+            "duty_date": "2026-10-27",
+            "start_time": "09:36:00",
+            "end_time": "10:40:00",
+            "description": "",
+            "notes": "",
+            "location": "Main Gate",
+            "time_slot": "09:36 - 10:40",
+            "reports_to": "",
+            "supervisor_id": 7,
+            "backup_person": "",
+            "backup_user_id": 5,
+            "priority": "",
+            "assigned_to": 4,
+            "assigned_by": 6,
+            "status": "Ongoing",
+            "due_at": null,
+            "created_at": "2026-10-27 01:39:25"
+        }
+    ],
+    "protocol_items": [
+        {
+            "id": 1,
+            "event_id": 1,
+            "item": "Verify VIP seating plan",
+            "instructions": "Confirm seat allocation and reserved sections.",
+            "completed": 1,
+            "sort_order": 1
+        },
+        {
+            "id": 2,
+            "event_id": 1,
+            "item": "Prepare protocol reception desk",
+            "instructions": "Ensure guest list and instructions are available.",
+            "completed": 1,
+            "sort_order": 2
+        },
+        {
+            "id": 3,
+            "event_id": 1,
+            "item": "Confirm ceremonial sequence",
+            "instructions": "Review official event sequence with responsible team.",
+            "completed": 1,
+            "sort_order": 3
+        },
+        {
+            "id": 4,
+            "event_id": 1,
+            "item": "Final venue inspection",
+            "instructions": "Check hall, entry, signage and reserved areas.",
+            "completed": 0,
+            "sort_order": 4
+        },
+        {
+            "id": 5,
+            "event_id": 2,
+            "item": "Confirm official guest arrival",
+            "instructions": "Coordinate expected arrival information.",
+            "completed": 0,
+            "sort_order": 1
+        },
+        {
+            "id": 6,
+            "event_id": 5,
+            "item": "VIP Recieption Management",
+            "instructions": "All should be done properly",
+            "completed": 0,
+            "sort_order": 1
+        }
+    ],
+    "attendance": [
+        {
+            "id": 1,
+            "event_id": 1,
+            "guest_id": 1,
+            "qr_token": "ATT-BUP-0001",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 2,
+            "event_id": 1,
+            "guest_id": 2,
+            "qr_token": "ATT-BUP-0002",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 3,
+            "event_id": 2,
+            "guest_id": 3,
+            "qr_token": "ATT-BUP-0003",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 4,
+            "event_id": 1,
+            "guest_id": 1,
+            "qr_token": "7NLEF",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 5,
+            "event_id": 2,
+            "guest_id": 3,
+            "qr_token": "QDBKB",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 6,
+            "event_id": 4,
+            "guest_id": 4,
+            "qr_token": "859R6",
+            "status": "Present",
+            "checkin_at": "2026-10-24 15:59:20"
+        },
+        {
+            "id": 7,
+            "event_id": 4,
+            "guest_id": 4,
+            "qr_token": "A94HR",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 9,
+            "event_id": 5,
+            "guest_id": 29,
+            "qr_token": "7T2NV",
+            "status": "Present",
+            "checkin_at": "2026-10-26 22:34:24"
+        },
+        {
+            "id": 10,
+            "event_id": 5,
+            "guest_id": 30,
+            "qr_token": "RNHFE",
+            "status": "Present",
+            "checkin_at": "2026-10-27 01:42:42"
+        },
+        {
+            "id": 11,
+            "event_id": 5,
+            "guest_id": 31,
+            "qr_token": "AN7MR",
+            "status": "Present",
+            "checkin_at": "2026-10-29 21:42:41"
+        },
+        {
+            "id": 12,
+            "event_id": 5,
+            "guest_id": null,
+            "qr_token": "UF4XE",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 13,
+            "event_id": 5,
+            "guest_id": null,
+            "qr_token": "PPQGX",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 14,
+            "event_id": 5,
+            "guest_id": 34,
+            "qr_token": "WWDKM",
+            "status": "Registered",
+            "checkin_at": null
+        },
+        {
+            "id": 15,
+            "event_id": 4,
+            "guest_id": 35,
+            "qr_token": "9XLQ2",
+            "status": "Registered",
+            "checkin_at": null
+        }
+    ],
+    "announcements": [
+        {
+            "id": 1,
+            "title": "Welcome to BUP Protocol",
+            "message": "The event command center is ready. Review upcoming events, duties and protocol checklists from the dashboard.",
+            "created_by": 1,
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "title": "Protocol Review Reminder",
+            "message": "All responsible personnel should review event-specific protocol requirements before execution.",
+            "created_by": 3,
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "title": "IEEE WIE Seminar on AI",
+            "message": "Innovative ai learning.",
+            "created_by": 1,
+            "created_at": "2026-10-26 22:35:32"
+        },
+        {
+            "id": 4,
+            "title": "Event Invitation: IEEE WIE Workshop On AI",
+            "message": "You have received an invitation to join IEEE WIE Workshop On AI. Date: Tuesday, 27 October 2026 | Venue: Shadhinota Auditorium. Actions: [Accept] [Decline] [View Details]",
+            "created_by": 6,
+            "created_at": "2026-10-27 01:41:47"
+        },
+        {
+            "id": 5,
+            "title": "Event Invitation: IEEE WIE Workshop On AI",
+            "message": "You have received an invitation to join IEEE WIE Workshop On AI. Date: Tuesday, 27 October 2026 | Venue: Shadhinota Auditorium 1st floor. Actions: [Accept] [Decline] [View Details]",
+            "created_by": 6,
+            "created_at": "2026-10-29 21:41:57"
+        },
+        {
+            "id": 6,
+            "title": "Event Invitation: IEEE WIE Workshop On AI",
+            "message": "You have received an invitation to join IEEE WIE Workshop On AI. Date: Tuesday, 27 October 2026 | Venue: Shadhinota Auditorium 1st floor. Actions: [Accept] [Decline] [View Details]",
+            "created_by": 6,
+            "created_at": "2026-10-29 21:42:01"
+        }
+    ],
+    "transport": [],
+    "emergency_contacts": [
+        {
+            "id": 1,
+            "name": "Emergency Control",
+            "designation": "Emergency Coordination Desk",
+            "phone": "999",
+            "department": "Emergency Services",
+            "notes": "Use for urgent emergency response.",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "name": "Campus Security",
+            "designation": "Security Duty Officer",
+            "phone": "01711000000",
+            "department": "Campus Security",
+            "notes": "Primary campus security contact.",
+            "created_at": "2026-10-24 15:14:15"
+        }
+    ],
+    "invitations": [
+        {
+            "id": 1,
+            "event_id": 1,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Brigadier General Guest",
+            "guest_email": "guest1@example.local",
+            "status": "Sent",
+            "qr_token": "7NLEF",
+            "invited_at": "2026-10-24 15:14:15",
+            "responded_at": null
+        },
+        {
+            "id": 2,
+            "event_id": 2,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Official Delegate",
+            "guest_email": "guest3@example.local",
+            "status": "Sent",
+            "qr_token": "QDBKB",
+            "invited_at": "2026-10-24 15:14:15",
+            "responded_at": null
+        },
+        {
+            "id": 3,
+            "event_id": 4,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Stephen Sikder",
+            "guest_email": "stephensikder2004@gmail.com",
+            "status": "Accepted",
+            "qr_token": "859R6",
+            "invited_at": "2026-10-24 15:40:04",
+            "responded_at": "2026-10-24 15:59:20"
+        },
+        {
+            "id": 4,
+            "event_id": 4,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Stephen Sikder",
+            "guest_email": "stephensikder2004@gmail.com",
+            "status": "Sent",
+            "qr_token": "A94HR",
+            "invited_at": "2026-10-24 15:40:21",
+            "responded_at": null
+        },
+        {
+            "id": 6,
+            "event_id": 4,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Stephen Sikder",
+            "guest_email": "stephensikder@gmail.com",
+            "status": "Accepted",
+            "qr_token": "859R6",
+            "invited_at": "2026-10-24 15:58:06",
+            "responded_at": "2026-10-24 15:59:20"
+        },
+        {
+            "id": 7,
+            "event_id": 4,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Rahim Uddin",
+            "guest_email": "stephensikder2004@gmail.com",
+            "status": "Sent",
+            "qr_token": "859R6",
+            "invited_at": "2026-10-26 22:27:01",
+            "responded_at": null
+        },
+        {
+            "id": 8,
+            "event_id": 5,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Arana Das",
+            "guest_email": "aranad974@gmail.com",
+            "status": "Accepted",
+            "qr_token": "7T2NV",
+            "invited_at": "2026-10-26 22:33:32",
+            "responded_at": "2026-10-26 22:34:24"
+        },
+        {
+            "id": 9,
+            "event_id": 5,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Hridoy Sikder",
+            "guest_email": "touristhridoy2004@gmail.com",
+            "status": "Accepted",
+            "qr_token": "RNHFE",
+            "invited_at": "2026-10-27 01:41:41",
+            "responded_at": "2026-10-27 01:42:42"
+        },
+        {
+            "id": 10,
+            "event_id": 5,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Argho Sikder",
+            "guest_email": "arghorisky@gmail.com",
+            "status": "Accepted",
+            "qr_token": "AN7MR",
+            "invited_at": "2026-10-29 21:41:52",
+            "responded_at": "2026-10-29 21:42:41"
+        },
+        {
+            "id": 11,
+            "event_id": 5,
+            "user_id": null,
+            "invitation_type": "Guest",
+            "team_department": null,
+            "message": null,
+            "guest_name": "Argho Sikder",
+            "guest_email": "arghorisky@gmail.com",
+            "status": "Accepted",
+            "qr_token": "AN7MR",
+            "invited_at": "2026-10-29 21:41:57",
+            "responded_at": "2026-10-29 21:42:41"
+        }
+    ],
+    "audit_logs": [
+        {
+            "id": 1,
+            "user_id": 1,
+            "action": "System Initialized",
+            "description": "BUP Event & Military Protocol Management System initialized.",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 2,
+            "user_id": 1,
+            "action": "Sample Data Loaded",
+            "description": "Demo events, guests, duties and protocol checklist created.",
+            "created_at": "2026-10-24 15:14:15"
+        },
+        {
+            "id": 3,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:15:03"
+        },
+        {
+            "id": 4,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:15:27"
+        },
+        {
+            "id": 5,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:18:01"
+        },
+        {
+            "id": 6,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:23:20"
+        },
+        {
+            "id": 7,
+            "user_id": 1,
+            "action": "Event Created",
+            "description": "Created event #4 \u2014 BUP CS Seminar",
+            "created_at": "2026-10-24 15:24:04"
+        },
+        {
+            "id": 8,
+            "user_id": 1,
+            "action": "Approval Approved",
+            "description": "Event \"BUP CS Seminar\" approval changed from Pending to Approved.",
+            "created_at": "2026-10-24 15:39:33"
+        },
+        {
+            "id": 9,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #3 created for Stephen Sikder for event \"BUP CS Seminar\".",
+            "created_at": "2026-10-24 15:40:04"
+        },
+        {
+            "id": 10,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #4 created for Stephen Sikder for event \"BUP CS Seminar\".",
+            "created_at": "2026-10-24 15:40:21"
+        },
+        {
+            "id": 11,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:51:57"
+        },
+        {
+            "id": 12,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #5 created for Major General Test (token: 92DHD) for event \"BUP Annual Academic Conference\".",
+            "created_at": "2026-10-24 15:52:04"
+        },
+        {
+            "id": 13,
+            "user_id": 1,
+            "action": "Guest Check-in",
+            "description": "Checked in Major General Test for event BUP Annual Academic Conference",
+            "created_at": "2026-10-24 15:52:45"
+        },
+        {
+            "id": 14,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 15:58:06"
+        },
+        {
+            "id": 15,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #6 created for Stephen Sikder (token: 859R6) for event \"BUP CS Seminar\".",
+            "created_at": "2026-10-24 15:58:06"
+        },
+        {
+            "id": 16,
+            "user_id": 1,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to stephensikder@gmail.com for invitation #6 (token: 859R6).",
+            "created_at": "2026-10-24 15:58:11"
+        },
+        {
+            "id": 17,
+            "user_id": 1,
+            "action": "Guest Check-in",
+            "description": "Checked in Stephen Sikder for event BUP CS Seminar",
+            "created_at": "2026-10-24 15:59:20"
+        },
+        {
+            "id": 18,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:19:13"
+        },
+        {
+            "id": 19,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:19:13"
+        },
+        {
+            "id": 20,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:19:13"
+        },
+        {
+            "id": 21,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:19:13"
+        },
+        {
+            "id": 22,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:19:14"
+        },
+        {
+            "id": 23,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:20:03"
+        },
+        {
+            "id": 24,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:20:09"
+        },
+        {
+            "id": 25,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:20:20"
+        },
+        {
+            "id": 26,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:20:28"
+        },
+        {
+            "id": 27,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-24 16:20:37"
+        },
+        {
+            "id": 28,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:15:52"
+        },
+        {
+            "id": 29,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:18:01"
+        },
+        {
+            "id": 30,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:19:37"
+        },
+        {
+            "id": 31,
+            "user_id": 8,
+            "action": "Duty Status Changed",
+            "description": "Set duty #4 status to Completed",
+            "created_at": "2026-10-25 01:21:02"
+        },
+        {
+            "id": 32,
+            "user_id": 8,
+            "action": "Protocol Completed",
+            "description": "Completed protocol item #3 \u2014 Confirm ceremonial sequence",
+            "created_at": "2026-10-25 01:21:20"
+        },
+        {
+            "id": 33,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:21:57"
+        },
+        {
+            "id": 34,
+            "user_id": 10,
+            "action": "Duty Status Changed",
+            "description": "Set duty #10 status to Ongoing",
+            "created_at": "2026-10-25 01:22:05"
+        },
+        {
+            "id": 35,
+            "user_id": 10,
+            "action": "Duty Status Changed",
+            "description": "Set duty #10 status to Completed",
+            "created_at": "2026-10-25 01:22:13"
+        },
+        {
+            "id": 36,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:22:43"
+        },
+        {
+            "id": 37,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:33:27"
+        },
+        {
+            "id": 38,
+            "user_id": 6,
+            "action": "Seat Assigned",
+            "description": "Assigned Brigadier General Guest to seat A05",
+            "created_at": "2026-10-25 01:33:48"
+        },
+        {
+            "id": 39,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:35:42"
+        },
+        {
+            "id": 40,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-25 01:56:19"
+        },
+        {
+            "id": 41,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:08:44"
+        },
+        {
+            "id": 42,
+            "user_id": 1,
+            "action": "Duty Created",
+            "description": "Created duty #11 \u2014 Online Poster Making [Communication L4]",
+            "created_at": "2026-10-26 22:11:21"
+        },
+        {
+            "id": 43,
+            "user_id": 1,
+            "action": "Duty Updated",
+            "description": "Updated duty #11 \u2014 Online Poster Making",
+            "created_at": "2026-10-26 22:13:51"
+        },
+        {
+            "id": 44,
+            "user_id": 1,
+            "action": "Duty Updated",
+            "description": "Updated duty #11 \u2014 Online Poster Making",
+            "created_at": "2026-10-26 22:16:29"
+        },
+        {
+            "id": 45,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Air Commodore Rezaul Karim to seat A01",
+            "created_at": "2026-10-26 22:19:58"
+        },
+        {
+            "id": 46,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Commodore M. A. Hasan to seat A06",
+            "created_at": "2026-10-26 22:20:05"
+        },
+        {
+            "id": 47,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #7 created for Rahim Uddin (token: 859R6) for event \"BUP CS Seminar\".",
+            "created_at": "2026-10-26 22:27:01"
+        },
+        {
+            "id": 48,
+            "user_id": 1,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to stephensikder2004@gmail.com for invitation #7 (token: 859R6).",
+            "created_at": "2026-10-26 22:27:10"
+        },
+        {
+            "id": 49,
+            "user_id": 1,
+            "action": "Event Created",
+            "description": "Created event #5 \u2014 IEEE WIE Workshop On AI",
+            "created_at": "2026-10-26 22:32:18"
+        },
+        {
+            "id": 50,
+            "user_id": 1,
+            "action": "Invitation Created",
+            "description": "Invitation #8 created for Arana Das (token: 7T2NV) for event \"IEEE WIE Workshop On AI\".",
+            "created_at": "2026-10-26 22:33:32"
+        },
+        {
+            "id": 51,
+            "user_id": 1,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to aranad974@gmail.com for invitation #8 (token: 7T2NV).",
+            "created_at": "2026-10-26 22:33:38"
+        },
+        {
+            "id": 52,
+            "user_id": 1,
+            "action": "Guest Check-in",
+            "description": "Checked in Arana Das for event IEEE WIE Workshop On AI",
+            "created_at": "2026-10-26 22:34:24"
+        },
+        {
+            "id": 53,
+            "user_id": 1,
+            "action": "Approval Approved",
+            "description": "Event \"IEEE WIE Workshop On AI\" approval changed from Pending to Approved.",
+            "created_at": "2026-10-26 22:34:46"
+        },
+        {
+            "id": 54,
+            "user_id": 1,
+            "action": "Announcement Published",
+            "description": "Announcement #3 \"IEEE WIE Seminar on AI\" was published.",
+            "created_at": "2026-10-26 22:35:32"
+        },
+        {
+            "id": 55,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:37:22"
+        },
+        {
+            "id": 56,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:37:56"
+        },
+        {
+            "id": 57,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:38:32"
+        },
+        {
+            "id": 58,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:43:44"
+        },
+        {
+            "id": 59,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:44:40"
+        },
+        {
+            "id": 60,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:46:51"
+        },
+        {
+            "id": 61,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:51:33"
+        },
+        {
+            "id": 62,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-26 22:51:40"
+        },
+        {
+            "id": 63,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 00:52:27"
+        },
+        {
+            "id": 64,
+            "user_id": 1,
+            "action": "Event Updated",
+            "description": "Updated event #4 \u2014 BUP CS Seminar",
+            "created_at": "2026-10-27 00:53:21"
+        },
+        {
+            "id": 65,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:25:09"
+        },
+        {
+            "id": 66,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:25:18"
+        },
+        {
+            "id": 67,
+            "user_id": 6,
+            "action": "Event Updated",
+            "description": "Updated event #4 \u2014 BUP CS Seminar",
+            "created_at": "2026-10-27 01:30:37"
+        },
+        {
+            "id": 68,
+            "user_id": 6,
+            "action": "Seat Assigned",
+            "description": "Assigned Arana Das to seat A14",
+            "created_at": "2026-10-27 01:33:13"
+        },
+        {
+            "id": 69,
+            "user_id": 6,
+            "action": "Duty Created",
+            "description": "Created duty #12 \u2014 Welcoming Guests [Logistics L2]",
+            "created_at": "2026-10-27 01:39:25"
+        },
+        {
+            "id": 70,
+            "user_id": 6,
+            "action": "Invitation Created",
+            "description": "Invitation #9 created for Hridoy Sikder (token: RNHFE) for event \"IEEE WIE Workshop On AI\".",
+            "created_at": "2026-10-27 01:41:41"
+        },
+        {
+            "id": 71,
+            "user_id": 6,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to touristhridoy2004@gmail.com for invitation #9 (token: RNHFE).",
+            "created_at": "2026-10-27 01:41:47"
+        },
+        {
+            "id": 72,
+            "user_id": 6,
+            "action": "Guest Check-in",
+            "description": "Checked in Hridoy Sikder for event IEEE WIE Workshop On AI",
+            "created_at": "2026-10-27 01:42:42"
+        },
+        {
+            "id": 73,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:44:29"
+        },
+        {
+            "id": 74,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:44:46"
+        },
+        {
+            "id": 75,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:47:46"
+        },
+        {
+            "id": 76,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:49:22"
+        },
+        {
+            "id": 77,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:52:04"
+        },
+        {
+            "id": 78,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:52:10"
+        },
+        {
+            "id": 79,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:52:17"
+        },
+        {
+            "id": 80,
+            "user_id": 4,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:52:53"
+        },
+        {
+            "id": 81,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:53:38"
+        },
+        {
+            "id": 82,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 01:55:20"
+        },
+        {
+            "id": 83,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:00:24"
+        },
+        {
+            "id": 84,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:06:46"
+        },
+        {
+            "id": 85,
+            "user_id": 4,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:12:36"
+        },
+        {
+            "id": 86,
+            "user_id": 4,
+            "action": "Duty Status Changed",
+            "description": "Set duty #12 status to Ongoing",
+            "created_at": "2026-10-27 02:12:43"
+        },
+        {
+            "id": 87,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:14:39"
+        },
+        {
+            "id": 88,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:40:24"
+        },
+        {
+            "id": 89,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:40:24"
+        },
+        {
+            "id": 90,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:02"
+        },
+        {
+            "id": 91,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:02"
+        },
+        {
+            "id": 92,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:02"
+        },
+        {
+            "id": 93,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:02"
+        },
+        {
+            "id": 94,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:03"
+        },
+        {
+            "id": 95,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:41:03"
+        },
+        {
+            "id": 96,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 97,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 98,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 99,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 100,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 101,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 102,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 103,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:00"
+        },
+        {
+            "id": 104,
+            "user_id": 19,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 105,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 106,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 107,
+            "user_id": 3,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 108,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 109,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 110,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 111,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:01"
+        },
+        {
+            "id": 112,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:10"
+        },
+        {
+            "id": 113,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 114,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 115,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 116,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 117,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 118,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 119,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:41"
+        },
+        {
+            "id": 120,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 121,
+            "user_id": 19,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 122,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 123,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 124,
+            "user_id": 3,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 125,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 126,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 127,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 128,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:42:42"
+        },
+        {
+            "id": 129,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:50:39"
+        },
+        {
+            "id": 130,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:52:14"
+        },
+        {
+            "id": 131,
+            "user_id": 4,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:53:30"
+        },
+        {
+            "id": 132,
+            "user_id": 19,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:53:54"
+        },
+        {
+            "id": 133,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 02:54:19"
+        },
+        {
+            "id": 134,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:08:02"
+        },
+        {
+            "id": 135,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:10:29"
+        },
+        {
+            "id": 136,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:10:47"
+        },
+        {
+            "id": 137,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:11:39"
+        },
+        {
+            "id": 138,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:12:03"
+        },
+        {
+            "id": 139,
+            "user_id": 19,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:12:29"
+        },
+        {
+            "id": 140,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:12:43"
+        },
+        {
+            "id": 141,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:12:52"
+        },
+        {
+            "id": 142,
+            "user_id": 3,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:13:47"
+        },
+        {
+            "id": 143,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:14:20"
+        },
+        {
+            "id": 144,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-27 12:14:50"
+        },
+        {
+            "id": 145,
+            "user_id": 1,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 20:50:36"
+        },
+        {
+            "id": 146,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Commodore M. A. Hasan to seat A07",
+            "created_at": "2026-10-29 20:52:03"
+        },
+        {
+            "id": 147,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Air Commodore Rezaul Karim to seat A06",
+            "created_at": "2026-10-29 20:52:09"
+        },
+        {
+            "id": 148,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Commodore M. A. Hasan to seat A01",
+            "created_at": "2026-10-29 20:52:13"
+        },
+        {
+            "id": 149,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Lieutenant General M. R. Chowdhury to seat B01",
+            "created_at": "2026-10-29 20:52:21"
+        },
+        {
+            "id": 150,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Major General Saiful Bari to seat B06",
+            "created_at": "2026-10-29 20:52:25"
+        },
+        {
+            "id": 151,
+            "user_id": 1,
+            "action": "Seat Assigned",
+            "description": "Assigned Colonel Masud Parvez to seat B10",
+            "created_at": "2026-10-29 20:52:35"
+        },
+        {
+            "id": 152,
+            "user_id": 1,
+            "action": "Protocol Item Added",
+            "description": "Added protocol item #6 \u2014 VIP Recieption Management",
+            "created_at": "2026-10-29 21:01:17"
+        },
+        {
+            "id": 153,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:20:40"
+        },
+        {
+            "id": 154,
+            "user_id": 7,
+            "action": "Seat Assigned",
+            "description": "Assigned Lt. Col. Tariq Mahmud to seat A05",
+            "created_at": "2026-10-29 21:22:08"
+        },
+        {
+            "id": 155,
+            "user_id": 7,
+            "action": "Event Updated",
+            "description": "Updated event #4 \u2014 BUP CS Seminar",
+            "created_at": "2026-10-29 21:24:25"
+        },
+        {
+            "id": 156,
+            "user_id": 7,
+            "action": "Event Updated",
+            "description": "Updated event #5 \u2014 IEEE WIE Workshop On AI",
+            "created_at": "2026-10-29 21:24:34"
+        },
+        {
+            "id": 157,
+            "user_id": 7,
+            "action": "Event Updated",
+            "description": "Updated event #1 \u2014 BUP Annual Academic Conference",
+            "created_at": "2026-10-29 21:24:40"
+        },
+        {
+            "id": 158,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:26:13"
+        },
+        {
+            "id": 159,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:26:38"
+        },
+        {
+            "id": 160,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:27:18"
+        },
+        {
+            "id": 161,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:32:21"
+        },
+        {
+            "id": 162,
+            "user_id": 6,
+            "action": "Invitation Created",
+            "description": "Invitation #10 created for Argho Sikder (token: AN7MR) for event \"IEEE WIE Workshop On AI\".",
+            "created_at": "2026-10-29 21:41:52"
+        },
+        {
+            "id": 163,
+            "user_id": 6,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to arghorisky@gmail.com for invitation #10 (token: AN7MR).",
+            "created_at": "2026-10-29 21:41:57"
+        },
+        {
+            "id": 164,
+            "user_id": 6,
+            "action": "Invitation Created",
+            "description": "Invitation #11 created for Argho Sikder (token: AN7MR) for event \"IEEE WIE Workshop On AI\".",
+            "created_at": "2026-10-29 21:41:57"
+        },
+        {
+            "id": 165,
+            "user_id": 6,
+            "action": "Invitation Email Sent",
+            "description": "Email submitted successfully to arghorisky@gmail.com for invitation #11 (token: AN7MR).",
+            "created_at": "2026-10-29 21:42:01"
+        },
+        {
+            "id": 166,
+            "user_id": 6,
+            "action": "Guest Check-in",
+            "description": "Checked in Argho Sikder for event IEEE WIE Workshop On AI",
+            "created_at": "2026-10-29 21:42:41"
+        },
+        {
+            "id": 167,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:45:03"
+        },
+        {
+            "id": 168,
+            "user_id": 7,
+            "action": "Guest Added",
+            "description": "Added guest #32 \u2014 Stephen Sikder",
+            "created_at": "2026-10-29 21:48:44"
+        },
+        {
+            "id": 169,
+            "user_id": 7,
+            "action": "Attendance Token Email Sent",
+            "description": "Attendance token emailed to stephensikder2004@gmail.com for guest #32",
+            "created_at": "2026-10-29 21:48:50"
+        },
+        {
+            "id": 170,
+            "user_id": 7,
+            "action": "Guest Added",
+            "description": "Added guest #33 \u2014 Stephen Sikder",
+            "created_at": "2026-10-29 21:48:50"
+        },
+        {
+            "id": 171,
+            "user_id": 7,
+            "action": "Attendance Token Email Sent",
+            "description": "Attendance token emailed to stephensikder2004@gmail.com for guest #33",
+            "created_at": "2026-10-29 21:48:56"
+        },
+        {
+            "id": 172,
+            "user_id": 7,
+            "action": "Guest Added",
+            "description": "Added guest #34 \u2014 Stephen Sikder",
+            "created_at": "2026-10-29 21:48:56"
+        },
+        {
+            "id": 173,
+            "user_id": 7,
+            "action": "Attendance Token Email Sent",
+            "description": "Attendance token emailed to stephensikder2004@gmail.com for guest #34",
+            "created_at": "2026-10-29 21:49:01"
+        },
+        {
+            "id": 174,
+            "user_id": 7,
+            "action": "Seat Assigned",
+            "description": "Assigned Stephen Sikder to seat A07",
+            "created_at": "2026-10-29 21:50:06"
+        },
+        {
+            "id": 175,
+            "user_id": 7,
+            "action": "Guest Deleted",
+            "description": "Deleted guest #33 \u2014 Stephen Sikder",
+            "created_at": "2026-10-29 21:50:40"
+        },
+        {
+            "id": 176,
+            "user_id": 7,
+            "action": "Guest Deleted",
+            "description": "Deleted guest #32 \u2014 Stephen Sikder",
+            "created_at": "2026-10-29 21:50:43"
+        },
+        {
+            "id": 177,
+            "user_id": 7,
+            "action": "Guest Added",
+            "description": "Added guest #35 \u2014 Sharmeen Sheema",
+            "created_at": "2026-10-29 21:51:03"
+        },
+        {
+            "id": 178,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 21:52:38"
+        },
+        {
+            "id": 179,
+            "user_id": 8,
+            "action": "Seat Assigned",
+            "description": "Assigned Argho Sikder to seat C02",
+            "created_at": "2026-10-29 21:54:53"
+        },
+        {
+            "id": 180,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:02:08"
+        },
+        {
+            "id": 181,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:03:35"
+        },
+        {
+            "id": 182,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:05:21"
+        },
+        {
+            "id": 183,
+            "user_id": 19,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:05:42"
+        },
+        {
+            "id": 184,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:07:33"
+        },
+        {
+            "id": 185,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:10:16"
+        },
+        {
+            "id": 186,
+            "user_id": 3,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:16:46"
+        },
+        {
+            "id": 187,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:19:27"
+        },
+        {
+            "id": 188,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:21:12"
+        },
+        {
+            "id": 189,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:21:43"
+        },
+        {
+            "id": 190,
+            "user_id": 10,
+            "action": "FIELD ESCALATION (Medium)",
+            "description": "At Duty Station: Staff requesting field supervisor assistance at duty station.",
+            "created_at": "2026-10-29 22:22:49"
+        },
+        {
+            "id": 191,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:23:00"
+        },
+        {
+            "id": 192,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:24:06"
+        },
+        {
+            "id": 193,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 22:26:04"
+        },
+        {
+            "id": 194,
+            "user_id": 32,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:49:28"
+        },
+        {
+            "id": 195,
+            "user_id": null,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 196,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 197,
+            "user_id": 12,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 198,
+            "user_id": 13,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 199,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 200,
+            "user_id": 15,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 201,
+            "user_id": 16,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 202,
+            "user_id": 17,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 203,
+            "user_id": 18,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 204,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 205,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:51:50"
+        },
+        {
+            "id": 206,
+            "user_id": null,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:25"
+        },
+        {
+            "id": 207,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 208,
+            "user_id": 12,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 209,
+            "user_id": 13,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 210,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 211,
+            "user_id": 15,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 212,
+            "user_id": 16,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 213,
+            "user_id": 17,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 214,
+            "user_id": 18,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 215,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 216,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 217,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 218,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 219,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 220,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 221,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 222,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:26"
+        },
+        {
+            "id": 223,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:27"
+        },
+        {
+            "id": 224,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:27"
+        },
+        {
+            "id": 225,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:53:27"
+        },
+        {
+            "id": 226,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:54:38"
+        },
+        {
+            "id": 227,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:04"
+        },
+        {
+            "id": 228,
+            "user_id": null,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 229,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 230,
+            "user_id": 12,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 231,
+            "user_id": 13,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 232,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 233,
+            "user_id": 15,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 234,
+            "user_id": 16,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 235,
+            "user_id": 17,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 236,
+            "user_id": 18,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 237,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 238,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:27"
+        },
+        {
+            "id": 239,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 240,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 241,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 242,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 243,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 244,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 245,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 246,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 247,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:55:28"
+        },
+        {
+            "id": 248,
+            "user_id": null,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 249,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 250,
+            "user_id": 12,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 251,
+            "user_id": 13,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 252,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 253,
+            "user_id": 15,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 254,
+            "user_id": 16,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:37"
+        },
+        {
+            "id": 255,
+            "user_id": 17,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 256,
+            "user_id": 18,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 257,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 258,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 259,
+            "user_id": 7,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 260,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 261,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 262,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 263,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 264,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 265,
+            "user_id": 20,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 266,
+            "user_id": 21,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 267,
+            "user_id": 22,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-29 23:57:38"
+        },
+        {
+            "id": 268,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:04:54"
+        },
+        {
+            "id": 269,
+            "user_id": 6,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:05:00"
+        },
+        {
+            "id": 270,
+            "user_id": 11,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:05:32"
+        },
+        {
+            "id": 271,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:05:58"
+        },
+        {
+            "id": 272,
+            "user_id": 14,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:15:42"
+        },
+        {
+            "id": 273,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:15:50"
+        },
+        {
+            "id": 274,
+            "user_id": 10,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:16:26"
+        },
+        {
+            "id": 275,
+            "user_id": 9,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:16:29"
+        },
+        {
+            "id": 276,
+            "user_id": 8,
+            "action": "Login Successful",
+            "description": "User successfully signed into the BUP Protocol system.",
+            "created_at": "2026-10-30 00:16:39"
+        }
+    ],
+    "supplies": [
+        {
+            "id": 1,
+            "event_id": null,
+            "item_name": "Tactical Walkie-Talkies (VHF)",
+            "category": "Communication Equipment",
+            "qty_required": 30,
+            "qty_available": 28,
+            "qty_issued": 20,
+            "qty_remaining": 8,
+            "unit": "Sets",
+            "supplier": "BD Ordnance Depot",
+            "location": "Main Armoury & Comms Room",
+            "responsible_person": "Squadron Leader R. Chowdhury",
+            "req_date": null,
+            "delivery_date": null,
+            "delivery_status": "Delivered",
+            "stock_status": "Adequate",
+            "notes": "Tested with spare lithium battery packs.",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 2,
+            "event_id": null,
+            "item_name": "Ceremonial Red Carpet (100m)",
+            "category": "Venue Decoration",
+            "qty_required": 4,
+            "qty_available": 4,
+            "qty_issued": 2,
+            "qty_remaining": 2,
+            "unit": "Rolls",
+            "supplier": "National Protocol Suppliers",
+            "location": "Mirpur Protocol Warehouse",
+            "responsible_person": "Warrant Officer B. Das",
+            "req_date": null,
+            "delivery_date": null,
+            "delivery_status": "Delivered",
+            "stock_status": "Adequate",
+            "notes": "Cleaned and pressed for Convocation Hall.",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 3,
+            "event_id": null,
+            "item_name": "High-Visibility Security Vests",
+            "category": "Security Gear",
+            "qty_required": 100,
+            "qty_available": 100,
+            "qty_issued": 85,
+            "qty_remaining": 15,
+            "unit": "Pieces",
+            "supplier": "Cantonment Quartermaster",
+            "location": "Sector 4 Depot",
+            "responsible_person": "Sergeant T. Paul",
+            "req_date": null,
+            "delivery_date": null,
+            "delivery_status": "Delivered",
+            "stock_status": "Low Stock",
+            "notes": "Need 15 additional pieces for volunteer backup.",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 4,
+            "event_id": null,
+            "item_name": "Stage Audio PA Monitors & Mics",
+            "category": "AV \/ Sound",
+            "qty_required": 12,
+            "qty_available": 10,
+            "qty_issued": 8,
+            "qty_remaining": 2,
+            "unit": "Units",
+            "supplier": "SoundCraft BD Ltd.",
+            "location": "Central Auditorium Store",
+            "responsible_person": "Squadron Leader R. Chowdhury",
+            "req_date": null,
+            "delivery_date": null,
+            "delivery_status": "Delivered",
+            "stock_status": "Adequate",
+            "notes": "4 wireless handhelds, 6 lapels ready.",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 5,
+            "event_id": null,
+            "item_name": "VIP Vehicle Fleet Flags & Emblems",
+            "category": "Transport \/ Protocol",
+            "qty_required": 25,
+            "qty_available": 15,
+            "qty_issued": 12,
+            "qty_remaining": 3,
+            "unit": "Sets",
+            "supplier": "Army Protocol Directorate",
+            "location": "Transport Pool Gate 2",
+            "responsible_person": "Sergeant T. Paul",
+            "req_date": null,
+            "delivery_date": null,
+            "delivery_status": "Delivered",
+            "stock_status": "Low Stock",
+            "notes": "10 sets currently in replenishment.",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        }
+    ],
+    "media_documents": [
+        {
+            "id": 1,
+            "event_id": null,
+            "title": "Official BUP Convocation Press Kit 2026",
+            "category": "Press Release",
+            "description": "Complete press briefing, guest speaker bios, and media advisory package.",
+            "file_path": null,
+            "file_type": null,
+            "file_size": 0,
+            "responsible_staff_id": 31,
+            "approval_status": "Approved",
+            "media_task": "Distribution to National Print & Broadcast Media",
+            "documentation_status": "Completed",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 2,
+            "event_id": null,
+            "title": "Stage & VIP Seating Master Photo Coverage Plan",
+            "category": "Photography",
+            "description": "Scheduled camera angles for Chief Guest arrival, podium address, and crest handover.",
+            "file_path": null,
+            "file_type": null,
+            "file_size": 0,
+            "responsible_staff_id": 31,
+            "approval_status": "Approved",
+            "media_task": "Photo booth and roaming photographer deployment",
+            "documentation_status": "In Progress",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 3,
+            "event_id": null,
+            "title": "BUP Annual Ceremony Live Stream Broadcast Matrix",
+            "category": "Live Stream \/ Video",
+            "description": "Multi-camera RTMP stream configuration to YouTube Live and Campus Screens.",
+            "file_path": null,
+            "file_type": null,
+            "file_size": 0,
+            "responsible_staff_id": 31,
+            "approval_status": "Pending Review",
+            "media_task": "Audio-video feed routing with BUP TV Cell",
+            "documentation_status": "In Progress",
+            "created_at": "2026-10-29 23:28:14",
+            "updated_at": "2026-10-29 23:28:14"
+        }
+    ],
+    "military_sops": [
+        {
+            "id": 1,
+            "code": "SOP-CER-001",
+            "title": "State & Presidential Guard of Honour Protocol",
+            "category": "Ceremonial Protocols",
+            "version": "1.0",
+            "applicable_level": "Battalion \/ Company",
+            "content": "Full dress ceremonial sequence, 21-gun salute coordination, inspection lines, and band synchronization for visiting heads of state and dignitaries.",
+            "authorized_by": "Chief of General Staff \/ Protocol Cell",
+            "status": "Active",
+            "created_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 2,
+            "code": "SOP-SEC-004",
+            "title": "VIP Motorcade Escort & Route Clearance SOP",
+            "category": "Security & Escort",
+            "version": "1.0",
+            "applicable_level": "Brigade \/ Battalion",
+            "content": "Standard operational procedures for outer perimeter cordon, advance reconnaissance sweep, armed convoy escort, and emergency contingency extraction.",
+            "authorized_by": "Director General Military Operations (DGMO)",
+            "status": "Active",
+            "created_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 3,
+            "code": "SOP-MED-002",
+            "title": "Medical Evacuation & Tactical Field Support",
+            "category": "Medical & Emergency",
+            "version": "1.0",
+            "applicable_level": "Platoon \/ Section",
+            "content": "Field first-responder triage stations, dedicated military ambulance corridors, and immediate airlift coordination procedures.",
+            "authorized_by": "Directorate General of Medical Services",
+            "status": "Active",
+            "created_at": "2026-10-29 23:28:14"
+        },
+        {
+            "id": 4,
+            "code": "SOP-RAD-003",
+            "title": "Tactical Communications & Frequency Allotment",
+            "category": "Signals & Comms",
+            "version": "1.0",
+            "applicable_level": "Company \/ Platoon",
+            "content": "Secure VHF\/UHF tactical radio check-ins, silent radio watch procedures, backup signal flags, and emergency authentication codewords.",
+            "authorized_by": "Signals Directorate",
+            "status": "Active",
+            "created_at": "2026-10-29 23:28:14"
+        }
+    ]
+}

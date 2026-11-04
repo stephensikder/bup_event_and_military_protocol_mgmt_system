@@ -1,0 +1,20 @@
+# Credentials & Secrets
+config/mail.php
+.env
+.env.*
+*.pem
+*.key
+
+# Logs & Temporary Files
+*.log
+*.tmp
+*.temp
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
