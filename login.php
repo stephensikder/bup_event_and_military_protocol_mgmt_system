@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/config/auth.php';
 
 if (is_logged_in()) {
@@ -8,7 +9,7 @@ if (is_logged_in()) {
 $error = null;
 $email = trim($_POST['email'] ?? '');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
@@ -21,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $flash = get_flash();
+$hide_header_flash = true;
 $page_title = 'Secure Command Login | BUP Protocol';
 require __DIR__ . '/includes/header.php';
 ?>

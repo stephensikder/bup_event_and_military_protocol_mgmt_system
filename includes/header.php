@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
-$flash = get_flash();
+$flash = $flash ?? get_flash();
 ?>
 <!doctype html>
 <html lang="en">
@@ -21,7 +21,7 @@ $flash = get_flash();
 <?php endif; ?>
 <?php else: ?>
 <div class="public-shell">
-<?php if ($flash): ?>
+<?php if ($flash && empty($hide_header_flash)): ?>
 <div class="alert <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
 <?php endif; ?>
 <?php endif; ?>
