@@ -6,11 +6,26 @@
  */
 require_once __DIR__ . '/database.php';
 
+if (!function_exists('get_mongodb_uri')) {
+    function get_mongodb_uri(): string {
+        $envUri = getenv('MONGODB_URI') ?: ($_ENV['MONGODB_URI'] ?? null);
+        if ($envUri && trim($envUri) !== '') {
+            $uri = trim($envUri);
+            if (str_ends_with($uri, '/')) {
+                $uri .= 'bup_event_protocol';
+            }
+            return $uri;
+        }
+        return 'mongodb://127.0.0.1:27017/bup_event_protocol';
+    }
+}
+
 if (!function_exists('mongo_exec_eval')) {
     function mongo_exec_eval(string $script): ?string {
         $tmpJs = sys_get_temp_dir() . '/mongo_run_' . uniqid() . '.js';
         file_put_contents($tmpJs, $script);
-        $cmd = 'mongosh "mongodb://127.0.0.1:27017/bup_event_protocol" --quiet "' . str_replace('\\', '/', $tmpJs) . '"';
+        $uri = get_mongodb_uri();
+        $cmd = 'mongosh "' . addslashes($uri) . '" --quiet "' . str_replace('\\', '/', $tmpJs) . '"';
         $res = @shell_exec($cmd);
         @unlink($tmpJs);
         return $res;
