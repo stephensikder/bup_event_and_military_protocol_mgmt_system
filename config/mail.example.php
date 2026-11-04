@@ -11,3 +11,4 @@ return [
     'from_email' => 'your-email@gmail.com',
     'from_name'  => 'BUP Event & Military Protocol Management System',
 ];
+
